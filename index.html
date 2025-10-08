@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YachtExcel - World's #1 Superyacht Management Platform</title>
+    <meta name="description" content="Revolutionary yacht management platform with AI-powered operations, predictive maintenance, and comprehensive fleet management" />
+    <meta name="author" content="YachtExcel" />
+
+    <meta property="og:title" content="YachtExcel - Superyacht Management Platform" />
+    <meta property="og:description" content="Revolutionary yacht management platform with AI-powered operations" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@lovable_dev" />
+    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Comprehensive browser extension interference filtering -->
+    <script>
+      // Enhanced browser extension interference suppression
+      if (typeof window !== 'undefined') {
+        // Store original console methods
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+        
+        // Enhanced console filtering for crypto wallets and extensions
+        const suppressedPatterns = [
+          'Provider initialised',
+          'TronLink',
+          'tabReply',
+          'Deprecation warning',
+          'providers still starting',
+          'ethereum',
+          'web3',
+          'MetaMask',
+          'injected.js',
+          'content.js'
+        ];
+        
+        function shouldSuppress(message) {
+          return suppressedPatterns.some(pattern => 
+            message.toLowerCase().includes(pattern.toLowerCase())
+          );
+        }
+        
+        console.log = function(...args) {
+          const message = args.join(' ');
+          if (!shouldSuppress(message)) {
+            originalLog.apply(console, args);
+          }
+        };
+        
+        console.warn = function(...args) {
+          const message = args.join(' ');
+          if (!shouldSuppress(message)) {
+            originalWarn.apply(console, args);
+          }
+        };
+        
+        console.error = function(...args) {
+          const message = args.join(' ');
+          if (!shouldSuppress(message)) {
+            originalError.apply(console, args);
+          }
+        };
+        
+        // Prevent wallet extension globals from interfering
+        const cryptoGlobals = ['tronWeb', 'TronLink', 'ethereum', 'web3'];
+        cryptoGlobals.forEach(global => {
+          if (window[global]) {
+            try {
+              delete window[global];
+            } catch (e) {
+              window[global] = undefined;
+            }
+          }
+        });
+        
+        // Suppress extension-related events
+        window.addEventListener('error', function(e) {
+          if (e.filename && (e.filename.includes('extension://') || e.filename.includes('moz-extension://'))) {
+            e.preventDefault();
+            return false;
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

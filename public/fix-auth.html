@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Authentication - Yacht Sentinel AI</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            line-height: 1.6;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        .info { background: rgba(59, 130, 246, 0.3); border-left: 4px solid #3b82f6; }
+        .success { background: rgba(34, 197, 94, 0.3); border-left: 4px solid #22c55e; }
+        .error { background: rgba(239, 68, 68, 0.3); border-left: 4px solid #ef4444; }
+        .button {
+            display: inline-block;
+            background: #3b82f6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            text-decoration: none;
+            margin: 10px 5px;
+            transition: background 0.3s ease;
+        }
+        .button:hover {
+            background: #2563eb;
+        }
+        .button.success {
+            background: #22c55e;
+        }
+        .button.success:hover {
+            background: #16a34a;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        .auto-redirect {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Authentication Fixer</h1>
+        
+        <div class="status info">
+            <strong>Issue:</strong> Invalid Refresh Token error detected in console<br>
+            <strong>Solution:</strong> Clear all authentication data and start fresh
+        </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <button class="button" onclick="fixAuthIssue()">🧹 Fix Authentication Now</button>
+            <a href="http://localhost:5173/" class="button">🏠 Go to Main App</a>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function fixAuthIssue() {
+            addResult('🔍 Starting authentication cleanup...', 'info');
+            
+            try {
+                // Clear localStorage
+                const localKeysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (key.includes('supabase') || key.includes('auth') || key.includes('sb-vdjsfupbjtbkpuvwffbn'))) {
+                        localKeysToRemove.push(key);
+                    }
+                }
+                
+                localKeysToRemove.forEach(key => {
+                    localStorage.removeItem(key);
+                    addResult(`🗑️ Removed localStorage: ${key}`, 'success');
+                });
+
+                // Clear sessionStorage
+                const sessionKeysToRemove = [];
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const key = sessionStorage.key(i);
+                    if (key && (key.includes('supabase') || key.includes('auth') || key.includes('sb-vdjsfupbjtbkpuvwffbn'))) {
+                        sessionKeysToRemove.push(key);
+                    }
+                }
+                
+                sessionKeysToRemove.forEach(key => {
+                    sessionStorage.removeItem(key);
+                    addResult(`🗑️ Removed sessionStorage: ${key}`, 'success');
+                });
+
+                const totalRemoved = localKeysToRemove.length + sessionKeysToRemove.length;
+                
+                if (totalRemoved > 0) {
+                    addResult(`✅ Successfully cleared ${totalRemoved} authentication items`, 'success');
+                    addResult('🔄 Redirecting to main app in 3 seconds...', 'info');
+                    
+                    // Auto-redirect with countdown
+                    let countdown = 3;
+                    const countdownDiv = document.createElement('div');
+                    countdownDiv.className = 'auto-redirect';
+                    countdownDiv.innerHTML = `Redirecting in <strong>${countdown}</strong> seconds...`;
+                    document.getElementById('results').appendChild(countdownDiv);
+                    
+                    const countdownTimer = setInterval(() => {
+                        countdown--;
+                        countdownDiv.innerHTML = `Redirecting in <strong>${countdown}</strong> seconds...`;
+                        
+                        if (countdown === 0) {
+                            clearInterval(countdownTimer);
+                            window.location.href = 'http://localhost:5173/';
+                        }
+                    }, 1000);
+                    
+                } else {
+                    addResult('ℹ️ No authentication data found to clear', 'info');
+                    addResult('✅ Your authentication is already clean!', 'success');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error during cleanup: ${error.message}`, 'error');
+                addResult('💡 Please try refreshing this page and trying again', 'info');
+            }
+        }
+
+        // Auto-run if 'auto' parameter is present
+        window.onload = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('auto') === 'true') {
+                addResult('🤖 Auto-fix mode enabled', 'info');
+                setTimeout(fixAuthIssue, 1000);
+            }
+        };
+    </script>
+</body>
+</html>
