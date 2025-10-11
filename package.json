@@ -1,19 +1,21 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:supabase": "npx supabase start --ignore-health-check",
     "dev:full": "./start-dev.sh",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "build": "./increment-version.sh && vite build",
+    "build:dev": "./increment-version.sh && vite build --mode development",
+    "build:no-bump": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "supabase:reset": "npx supabase db reset",
     "supabase:status": "npx supabase status",
-    "supabase:stop": "npx supabase stop"
+    "supabase:stop": "npx supabase stop",
+    "version:bump": "./increment-version.sh"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.2",

@@ -3,193 +3,185 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { handleAuthError, isRefreshTokenError } from '@/utils/authUtils';
 
-// Global auth state to prevent multiple initializations
-let globalAuthState: {
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
-  initialized: boolean;
-} = {
-  user: null,
-  session: null,
+// Simplified global auth state
+let globalAuthState = {
+  user: null as User | null,
+  session: null as Session | null,
   loading: true,
   initialized: false
 };
 
-let globalSubscription: any = null;
-const authCallbacks: Set<(state: typeof globalAuthState) => void> = new Set();
-let notificationDebounce: NodeJS.Timeout | null = null;
-let initializationPromise: Promise<void> | null = null;
+let authSubscription: any = null;
+let subscribers: Set<(state: typeof globalAuthState) => void> = new Set();
 let isInitializing = false;
 
-// Debounced notification to prevent rapid state updates
+// Immediate state notification
 const notifySubscribers = () => {
-  if (notificationDebounce) clearTimeout(notificationDebounce);
-  notificationDebounce = setTimeout(() => {
-    authCallbacks.forEach(callback => callback(globalAuthState));
-  }, 50); // Increased debounce time to reduce rapid updates
+  console.log('[Auth] Notifying', subscribers.size, 'subscribers:', {
+    loading: globalAuthState.loading,
+    isAuthenticated: !!globalAuthState.session,
+    initialized: globalAuthState.initialized
+  });
+  subscribers.forEach(callback => {
+    try {
+      callback({ ...globalAuthState });
+    } catch (error) {
+      console.error('[Auth] Subscriber callback error:', error);
+    }
+  });
 };
 
-// Initialize auth once globally
-const initializeGlobalAuth = async (): Promise<void> => {
-  // Return existing promise if already initializing
-  if (initializationPromise) {
-    return initializationPromise;
+// Clean, simple initialization - trust Supabase's built-in validation
+const initializeAuth = async () => {
+  if (isInitializing) {
+    return;
   }
   
-  if (globalAuthState.initialized || isInitializing) {
-    return Promise.resolve();
+  if (globalAuthState.initialized) {
+    notifySubscribers();
+    return;
   }
   
-  // Mark as initializing immediately to prevent race conditions
   isInitializing = true;
+  console.log('[Auth] Initializing...');
   
-  initializationPromise = (async () => {
-    try {
-      // Mark as initializing to prevent race conditions
-      globalAuthState.initialized = true;
-      console.log('[Auth] Initializing authentication system (single instance)');
-      console.log('[Auth] Provider initialised'); // Keep debug logging
-      
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error?.message.includes('Invalid Refresh Token') || 
-          error?.message.includes('Refresh Token Not Found') ||
-          error?.message.includes('refresh_token')) {
-        // Clear invalid tokens silently
-        console.log('[Auth] Clearing invalid refresh token');
-        await supabase.auth.signOut({ scope: 'local' });
-        globalAuthState = { user: null, session: null, loading: false, initialized: true };
-      } else {
+  try {
+    // Add timeout to prevent hanging
+    const sessionPromise = supabase.auth.getSession();
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout')), 3000)
+    );
+    
+    const result = await Promise.race([sessionPromise, timeoutPromise]) as any;
+    const session = result?.data?.session || null;
+    
+    globalAuthState = {
+      user: session?.user || null,
+      session: session || null,
+      loading: false,
+      initialized: true
+    };
+    
+    console.log('[Auth] Ready -', session ? `Logged in as ${session.user.email}` : 'No session');
+    notifySubscribers();
+    
+    // Set up auth state listener ONCE
+    if (!authSubscription) {
+      authSubscription = supabase.auth.onAuthStateChange((event, session) => {
+        console.log('[Auth] Event:', event);
+        
         globalAuthState = {
-          user: session?.user ?? null,
-          session: session,
+          user: session?.user || null,
+          session: session || null,
           loading: false,
           initialized: true
         };
-        
-        // Debug successful auth state
-        if (session?.user) {
-          console.log('[Auth] Session found:', {
-            userEmail: session.user.email,
-            userId: session.user.id,
-            hasSession: !!session
-          });
-        }
-      }
-      
-      // Single auth state listener for entire app
-      if (!globalSubscription) {
-        globalSubscription = supabase.auth.onAuthStateChange((event, session) => {
-          // Prevent rapid state changes during initialization
-          if (event === 'INITIAL_SESSION') {
-            return; // Skip initial session to prevent duplicate updates
-          }
-          
-          // Handle auth errors gracefully
-          if (event === 'TOKEN_REFRESHED' && !session) {
-            console.log('[Auth] Token refresh failed, clearing session');
-            globalAuthState = {
-              user: null,
-              session: null,
-              loading: false,
-              initialized: true
-            };
-          } else {
-            globalAuthState = {
-              user: session?.user ?? null,
-              session: session,
-              loading: false,
-              initialized: true
-            };
-          }
-          
-          // Notify all subscribers with debounce
-          notifySubscribers();
-        });
-      }
-      
-      // Notify all subscribers
-      notifySubscribers();
-      
-    } catch (error) {
-      console.log('[Auth] Session initialization error:', error);
-      
-      // Handle refresh token errors
-      if (isRefreshTokenError(error)) {
-        await handleAuthError(error);
-        return; // handleAuthError will reload the page
-      }
-      
-      globalAuthState = { user: null, session: null, loading: false, initialized: true };
-      notifySubscribers();
-    } finally {
-      isInitializing = false;
+        notifySubscribers();
+      });
     }
-  })();
-  
-  return initializationPromise;
+    
+  } catch (error) {
+    console.warn('[Auth] Init timeout/error - starting without session');
+    globalAuthState = {
+      user: null,
+      session: null,
+      loading: false,
+      initialized: true
+    };
+    notifySubscribers();
+  } finally {
+    isInitializing = false;
+  }
 };
 
 export const useSupabaseAuth = () => {
-  const [localState, setLocalState] = useState(globalAuthState);
-
-  const updateLocalState = useCallback((newState: typeof globalAuthState) => {
-    setLocalState(newState);
-  }, []);
-
-  useEffect(() => {
-    // Subscribe to global auth state
-    authCallbacks.add(updateLocalState);
-    
-    // Initialize if not already done (with promise support)
-    if (!globalAuthState.initialized) {
-      initializeGlobalAuth();
-    } else {
-      // Use existing state
-      setLocalState(globalAuthState);
-    }
-
-    return () => {
-      authCallbacks.delete(updateLocalState);
-    };
-  }, [updateLocalState]);
-
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Error signing out:', error);
-    }
-    return { error };
-  };
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+  const [state, setState] = useState(globalAuthState);
+  
+  const updateState = useCallback((newState: typeof globalAuthState) => {
+    console.log('[useSupabaseAuth] State update:', {
+      loading: newState.loading,
+      isAuthenticated: !!newState.session,
+      initialized: newState.initialized
     });
+    setState(newState);
+  }, []);
+  
+  useEffect(() => {
+    console.log('[useSupabaseAuth] Hook initialized');
+    
+    // Subscribe to updates
+    subscribers.add(updateState);
+    
+    // Initialize auth if needed
+    if (!globalAuthState.initialized && !isInitializing) {
+      // Start initialization - NO timeout that could clear valid sessions
+      initializeAuth();
+    } else {
+      // Use current state immediately
+      console.log('[useSupabaseAuth] Using existing global state:', {
+        hasUser: !!globalAuthState.user,
+        hasSession: !!globalAuthState.session,
+        loading: globalAuthState.loading,
+        initialized: globalAuthState.initialized
+      });
+      setState(globalAuthState);
+    }
+    
+    return () => {
+      subscribers.delete(updateState);
+    };
+  }, [updateState]);
+  
+  const signIn = async (email: string, password: string) => {
+    console.log('[Auth] Attempting sign in');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      console.error('[Auth] Sign in error:', error);
+    }
     return { error };
   };
-
+  
   const signUp = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    console.log('[Auth] Attempting sign up');
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: redirectUrl
-      }
+      options: { emailRedirectTo: `${window.location.origin}/` }
     });
+    if (error) {
+      console.error('[Auth] Sign up error:', error);
+    }
     return { error };
   };
-
+  
+  const signOut = async () => {
+    console.log('[Auth] Signing out');
+    
+    // Update state immediately
+    globalAuthState = {
+      user: null,
+      session: null,
+      loading: false,
+      initialized: true
+    };
+    notifySubscribers();
+    
+    // Clear storage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Sign out from Supabase
+    const { error } = await supabase.auth.signOut();
+    return { error };
+  };
+  
   return {
-    user: localState.user,
-    session: localState.session,
-    loading: localState.loading,
-    signOut,
+    user: state.user,
+    session: state.session,
+    loading: state.loading,
+    isAuthenticated: !!state.session,
     signIn,
     signUp,
-    isAuthenticated: !!localState.session
+    signOut
   };
 };

@@ -8,8 +8,9 @@ import { store } from '@/store';
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { UnifiedYachtSentinelProvider } from "@/contexts/UnifiedYachtSentinelContext";
 import { YachtProvider } from "@/contexts/YachtContext";
-import { SuperAdminProvider } from "@/contexts/SuperAdminContext";
+import { UserRoleProvider } from "@/contexts/UserRoleContext";
 import { AppSettingsProvider } from "@/contexts/AppSettingsContext";
+import { SuperAdminProvider } from "@/contexts/SuperAdminContext";
 
 // Initialize authentication error handling
 import '@/utils/authErrorHandler';
@@ -20,6 +21,7 @@ import { systemHealthService } from '@/services/systemHealthService';
 import { enterpriseHealthOrchestrator } from '@/services/enterpriseHealthOrchestrator';
 import { debugConsole } from '@/services/debugConsole';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { useVisibilityRefresh } from '@/hooks/useVisibilityRefresh';
 
 // Lazy load components for better performance
 import { lazy, Suspense } from "react";
@@ -88,48 +90,79 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// Router-level authentication guard
+// Bulletproof Authentication Guard
 const RouterAuthGuard = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, loading } = useSupabaseAuth();
   const location = useLocation();
+  
+  // Add visibility refresh handler
+  useVisibilityRefresh();
 
-  // Show loading while determining auth state
+  // Debug current state
+  React.useEffect(() => {
+    console.log('[RouterAuthGuard] State:', {
+      loading,
+      isAuthenticated,
+      pathname: location.pathname,
+      timestamp: new Date().toISOString()
+    });
+  }, [loading, isAuthenticated, location.pathname]);
+
+  // Show loading during initialization
   if (loading) {
+    console.log('[RouterAuthGuard] Showing loading screen');
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Initializing application...</p>
+          <p className="mt-2 text-muted-foreground">Initializing...</p>
         </div>
       </div>
     );
   }
 
-  // If user is not authenticated and not on auth page, redirect to auth
-  if (!isAuthenticated && location.pathname !== '/auth') {
+  // Authentication logic
+  const isOnAuthPage = location.pathname === '/auth';
+  
+  // Not authenticated - redirect to login (unless already there)
+  if (!isAuthenticated && !isOnAuthPage) {
+    console.log('[RouterAuthGuard] Not authenticated - redirecting to /auth');
     return <Navigate to="/auth" replace />;
   }
-
-  // If user is authenticated and on auth page, redirect to home
-  if (isAuthenticated && location.pathname === '/auth') {
+  
+  // Authenticated but on auth page - redirect to home
+  if (isAuthenticated && isOnAuthPage) {
+    console.log('[RouterAuthGuard] Already authenticated - redirecting to home');
     return <Navigate to="/" replace />;
   }
-
+  
+  // Allow access
+  console.log('[RouterAuthGuard] Access granted to:', location.pathname);
   return <>{children}</>;
 };
 
 // Component to handle automated enterprise health monitoring
 const AppStartupHandler = () => {
-  // Initialize automatic health checking on app start and login
+  const { isAuthenticated, loading } = useSupabaseAuth();
+  
+  // IMPORTANT: Only run health checks and AI initialization AFTER user is authenticated
+  const shouldInitialize = isAuthenticated && !loading;
+  
+  // Initialize automatic health checking ONLY after login
   useStartupHealthCheck({
-    enabled: true,
-    delay: 8000, // 8 second delay after AI initialization for comprehensive checks
+    enabled: shouldInitialize, // Only when authenticated
+    delay: 2000, // 2 second delay - fast but non-blocking
     runOnLogin: true,
-    runOnAppStart: true
+    runOnAppStart: false, // Don't run on app start, only after login
+    nonBlocking: true // Don't block UI while health checks run
   });
 
-  // Initialize enterprise health orchestrator - fully automated
+  // Initialize enterprise health orchestrator - ONLY when authenticated
   React.useEffect(() => {
+    if (!shouldInitialize) {
+      return; // Don't initialize until user is logged in
+    }
+    
     let isInitialized = false;
     
     const initializeEnterpriseMonitoring = async () => {
@@ -157,10 +190,10 @@ const AppStartupHandler = () => {
       }
     };
 
-    // Initialize after a delay to ensure all systems are ready
+    // Initialize after a short delay to ensure all systems are ready
     const initTimeout = setTimeout(() => {
       initializeEnterpriseMonitoring();
-    }, 30000); // 30 seconds to ensure complete system initialization
+    }, 5000); // 5 seconds - fast initialization
 
     return () => {
       clearTimeout(initTimeout);
@@ -168,7 +201,7 @@ const AppStartupHandler = () => {
         enterpriseHealthOrchestrator.cleanup();
       }
     };
-  }, []);
+  }, [shouldInitialize]); // Only run when authentication state changes
 
   return null; // This component doesn't render anything
 };
@@ -187,12 +220,13 @@ const App = () => {
               v7_relativeSplatPath: true
             }}
           >
-            <SuperAdminProvider>
-              <UnifiedYachtSentinelProvider>
-                <AppSettingsProvider>
-                  <YachtProvider>
-                    <AppStartupHandler />
-                    <RouterAuthGuard>
+            <UserRoleProvider>
+              <SuperAdminProvider>
+                <UnifiedYachtSentinelProvider>
+                  <AppSettingsProvider>
+                    <YachtProvider>
+                      <AppStartupHandler />
+                      <RouterAuthGuard>
                       <Suspense fallback={<LoadingSpinner />}>
                         <Routes>
               <Route path="/auth" element={<Auth />} />
@@ -564,11 +598,12 @@ const App = () => {
               } />
                         </Routes>
                       </Suspense>
-                    </RouterAuthGuard>
-                  </YachtProvider>
-                </AppSettingsProvider>
-              </UnifiedYachtSentinelProvider>
-            </SuperAdminProvider>
+                      </RouterAuthGuard>
+                    </YachtProvider>
+                  </AppSettingsProvider>
+                </UnifiedYachtSentinelProvider>
+              </SuperAdminProvider>
+            </UserRoleProvider>
         </BrowserRouter>
       </ErrorBoundary>
     </TooltipProvider>

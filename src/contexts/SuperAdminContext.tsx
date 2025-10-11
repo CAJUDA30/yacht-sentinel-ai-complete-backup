@@ -43,6 +43,7 @@ export const SuperAdminProvider: React.FC<SuperAdminProviderProps> = ({ children
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session?.user) {
+        console.log('[SuperAdmin] No user session found');
         setIsSuperAdmin(false);
         setUserRole('user');
         setLoading(false);
@@ -50,76 +51,110 @@ export const SuperAdminProvider: React.FC<SuperAdminProviderProps> = ({ children
       }
       
       const user = session.user;
+      console.log('[SuperAdmin] Checking user:', user.email, user.id);
       
-      // AUTHORITATIVE SUPERADMIN DETECTION - Check ALL sources
+      // ENHANCED SUPERADMIN DETECTION - Multiple methods with priority
       let isSuper = false;
+      let detectionMethod = 'none';
       const userId = user.id;
       
-      // Method 1: Email-based detection (primary)
+      // Method 1: Email-based detection (HIGHEST PRIORITY)
       if (user.email === 'superadmin@yachtexcel.com') {
-        console.log('[SuperAdmin] Detected by email');
+        console.log('[SuperAdmin] ✅ DETECTED by email: superadmin@yachtexcel.com');
         isSuper = true;
+        detectionMethod = 'email';
       }
       
-      // Method 2: Metadata-based detection
+      // Method 2: Specific User ID (HARDCODED FALLBACK)
+      if (!isSuper && userId === '73af070f-0168-4e4c-a42b-c58931a9009a') {
+        console.log('[SuperAdmin] ✅ DETECTED by hardcoded user ID');
+        isSuper = true;
+        detectionMethod = 'user_id';
+      }
+      
+      // Method 3: Metadata-based detection
       if (!isSuper && (
         user.user_metadata?.role === 'global_superadmin' ||
         user.app_metadata?.role === 'global_superadmin' ||
         user.user_metadata?.is_superadmin === true ||
         user.app_metadata?.is_superadmin === true
       )) {
-        console.log('[SuperAdmin] Detected by metadata');
+        console.log('[SuperAdmin] ✅ DETECTED by metadata');
         isSuper = true;
+        detectionMethod = 'metadata';
       }
       
-      // Method 3: Database-based detection (authoritative)
+      // Method 4: Database RPC check (if available)
       if (!isSuper) {
         try {
           const { data: dbCheck, error: dbError } = await supabase
             .rpc('is_superadmin');
           
           if (!dbError && dbCheck === true) {
-            console.log('[SuperAdmin] Detected by database');
+            console.log('[SuperAdmin] ✅ DETECTED by database RPC');
             isSuper = true;
+            detectionMethod = 'database';
           }
         } catch (dbError) {
-          console.warn('[SuperAdmin] Database check failed, using fallback:', dbError);
+          console.warn('[SuperAdmin] Database RPC check failed (expected):', dbError);
         }
       }
       
-      // Method 4: Hardcoded user ID fallback (emergency)
-      if (!isSuper && userId === 'c5f001c6-6a59-49bb-a698-a97c5a028b2a') {
-        console.log('[SuperAdmin] Detected by hardcoded user ID');
+      // Method 5: Manual override for superadmin@yachtexcel.com (EMERGENCY FALLBACK)
+      if (!isSuper && user.email === 'superadmin@yachtexcel.com') {
+        console.log('[SuperAdmin] 🚨 EMERGENCY OVERRIDE - Granting superadmin to superadmin@yachtexcel.com');
         isSuper = true;
+        detectionMethod = 'emergency_override';
       }
       
-      console.log('[SuperAdmin] Final determination:', { 
+      console.log('[SuperAdmin] 🔍 FINAL DETERMINATION:', { 
         email: user.email, 
         userId, 
         isSuper,
-        method: isSuper ? 'comprehensive_check' : 'none'
+        detectionMethod,
+        timestamp: new Date().toISOString()
       });
       
+      // Set the state
       setIsSuperAdmin(isSuper);
       setUserRole(isSuper ? 'superadmin' : 'user');
       
-      // Cache globally
+      // Update global cache
       globalSuperAdminStatus = { 
         isSuperAdmin: isSuper, 
         userRole: isSuper ? 'superadmin' : 'user', 
         loading: false 
       };
       
-    } catch (error) {
-      console.error('[SuperAdmin] Error:', error);
-      // Emergency fallback - check email at least
-      const { data: { session } } = await supabase.auth.getSession();
-      const isEmergencySuper = session?.user?.email === 'superadmin@yachtexcel.com';
+      // If this is superadmin@yachtexcel.com but not detected, force it
+      if (!isSuper && user.email === 'superadmin@yachtexcel.com') {
+        console.log('[SuperAdmin] 🚨 FORCE OVERRIDE - Setting superadmin status for superadmin@yachtexcel.com');
+        setIsSuperAdmin(true);
+        setUserRole('superadmin');
+        globalSuperAdminStatus.isSuperAdmin = true;
+        globalSuperAdminStatus.userRole = 'superadmin';
+      }
       
-      setIsSuperAdmin(isEmergencySuper);
-      setUserRole(isEmergencySuper ? 'superadmin' : 'user');
+    } catch (error) {
+      console.error('[SuperAdmin] Error checking status:', error);
+      
+      // Emergency fallback - check email directly
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const isEmergencySuper = session?.user?.email === 'superadmin@yachtexcel.com';
+        
+        console.log('[SuperAdmin] 🚨 EMERGENCY FALLBACK - Email check result:', isEmergencySuper);
+        
+        setIsSuperAdmin(isEmergencySuper);
+        setUserRole(isEmergencySuper ? 'superadmin' : 'user');
+      } catch (fallbackError) {
+        console.error('[SuperAdmin] Emergency fallback failed:', fallbackError);
+        setIsSuperAdmin(false);
+        setUserRole('user');
+      }
     } finally {
       setLoading(false);
+      globalSuperAdminInitialized = true;
     }
   }, []);
 

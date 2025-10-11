@@ -7,109 +7,248 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ai_health: {
         Row: {
           created_at: string
           id: string
-          last_check: string | null
+          last_checked_at: string
+          metadata: Json | null
           provider_id: string
           status: string
-          updated_at: string
         }
         Insert: {
           created_at?: string
           id?: string
-          last_check?: string | null
+          last_checked_at?: string
+          metadata?: Json | null
           provider_id: string
           status: string
-          updated_at?: string
         }
         Update: {
           created_at?: string
           id?: string
-          last_check?: string | null
+          last_checked_at?: string
+          metadata?: Json | null
           provider_id?: string
           status?: string
-          updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ai_health_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: true
+            referencedRelation: "ai_providers_unified"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ai_models_unified: {
         Row: {
           capabilities: Json | null
-          created_at: string
+          config: Json | null
+          created_at: string | null
+          description: string | null
+          display_name: string | null
           id: string
+          input_cost_per_token: number | null
           is_active: boolean | null
-          max_context_length: number | null
-          model_id: string
-          model_name: string | null
+          max_tokens: number | null
           model_type: string | null
           name: string
+          output_cost_per_token: number | null
           priority: number | null
-          provider: string
-          provider_id: string | null
-          updated_at: string
+          provider_id: string
+          updated_at: string | null
         }
         Insert: {
           capabilities?: Json | null
-          created_at?: string
+          config?: Json | null
+          created_at?: string | null
+          description?: string | null
+          display_name?: string | null
           id?: string
+          input_cost_per_token?: number | null
           is_active?: boolean | null
-          max_context_length?: number | null
-          model_id: string
-          model_name?: string | null
+          max_tokens?: number | null
           model_type?: string | null
           name: string
+          output_cost_per_token?: number | null
           priority?: number | null
-          provider: string
-          provider_id?: string | null
-          updated_at?: string
+          provider_id: string
+          updated_at?: string | null
         }
         Update: {
           capabilities?: Json | null
-          created_at?: string
+          config?: Json | null
+          created_at?: string | null
+          description?: string | null
+          display_name?: string | null
           id?: string
+          input_cost_per_token?: number | null
           is_active?: boolean | null
-          max_context_length?: number | null
-          model_id?: string
-          model_name?: string | null
+          max_tokens?: number | null
           model_type?: string | null
           name?: string
+          output_cost_per_token?: number | null
           priority?: number | null
-          provider?: string
-          provider_id?: string | null
-          updated_at?: string
+          provider_id?: string
+          updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ai_models_unified_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "ai_providers_unified"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_provider_logs: {
+        Row: {
+          created_at: string
+          details: Json | null
+          id: string
+          latency_ms: number | null
+          message: string | null
+          provider_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          latency_ms?: number | null
+          message?: string | null
+          provider_id: string
+          status: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          latency_ms?: number | null
+          message?: string | null
+          provider_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_provider_logs_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "ai_providers_unified"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ai_providers_unified: {
         Row: {
+          api_endpoint: string | null
+          api_secret_name: string | null
+          auth_header_name: string | null
+          auth_method: string | null
+          auth_type: string | null
+          base_url: string | null
+          capabilities: Json | null
           config: Json | null
           created_at: string
+          description: string | null
+          discovery_url: string | null
+          error_count: number | null
+          health_status: string | null
           id: string
           is_active: boolean | null
+          is_primary: boolean | null
+          last_health_check: string | null
+          models_endpoint: string | null
           name: string
-          provider_type: string
+          priority: number | null
+          provider_type: string | null
+          rate_limit_per_minute: number | null
+          success_rate: number | null
+          supported_languages: string[] | null
           updated_at: string
         }
         Insert: {
+          api_endpoint?: string | null
+          api_secret_name?: string | null
+          auth_header_name?: string | null
+          auth_method?: string | null
+          auth_type?: string | null
+          base_url?: string | null
+          capabilities?: Json | null
           config?: Json | null
           created_at?: string
+          description?: string | null
+          discovery_url?: string | null
+          error_count?: number | null
+          health_status?: string | null
           id?: string
           is_active?: boolean | null
+          is_primary?: boolean | null
+          last_health_check?: string | null
+          models_endpoint?: string | null
           name: string
-          provider_type: string
+          priority?: number | null
+          provider_type?: string | null
+          rate_limit_per_minute?: number | null
+          success_rate?: number | null
+          supported_languages?: string[] | null
           updated_at?: string
         }
         Update: {
+          api_endpoint?: string | null
+          api_secret_name?: string | null
+          auth_header_name?: string | null
+          auth_method?: string | null
+          auth_type?: string | null
+          base_url?: string | null
+          capabilities?: Json | null
           config?: Json | null
           created_at?: string
+          description?: string | null
+          discovery_url?: string | null
+          error_count?: number | null
+          health_status?: string | null
           id?: string
           is_active?: boolean | null
+          is_primary?: boolean | null
+          last_health_check?: string | null
+          models_endpoint?: string | null
           name?: string
-          provider_type?: string
+          priority?: number | null
+          provider_type?: string | null
+          rate_limit_per_minute?: number | null
+          success_rate?: number | null
+          supported_languages?: string[] | null
           updated_at?: string
         }
         Relationships: []
@@ -117,552 +256,509 @@ export type Database = {
       ai_system_config: {
         Row: {
           config_key: string
-          config_value: Json | null
-          created_at: string
+          config_value: Json
+          created_at: string | null
+          created_by: string | null
+          description: string | null
           id: string
-          is_active: boolean | null
-          updated_at: string
-          yacht_id: string | null
+          is_sensitive: boolean | null
+          updated_at: string | null
+          updated_by: string | null
         }
         Insert: {
           config_key: string
-          config_value?: Json | null
-          created_at?: string
+          config_value: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
           id?: string
-          is_active?: boolean | null
-          updated_at?: string
-          yacht_id?: string | null
+          is_sensitive?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Update: {
           config_key?: string
-          config_value?: Json | null
-          created_at?: string
-          id?: string
-          is_active?: boolean | null
-          updated_at?: string
-          yacht_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_system_config_yacht_id_fkey"
-            columns: ["yacht_id"]
-            isOneToOne: false
-            referencedRelation: "yachts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      audit_workflows: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: string
-          is_active: boolean | null
-          name: string
-          updated_at: string
-          workflow_data: Json | null
-          yacht_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean | null
-          name: string
-          updated_at?: string
-          workflow_data?: Json | null
-          yacht_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean | null
-          name?: string
-          updated_at?: string
-          workflow_data?: Json | null
-          yacht_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "audit_workflows_yacht_id_fkey"
-            columns: ["yacht_id"]
-            isOneToOne: false
-            referencedRelation: "yachts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      certificates: {
-        Row: {
-          certificate_number: string | null
-          created_at: string
-          document_url: string | null
-          expiry_date: string | null
-          id: string
-          issue_date: string | null
-          issuer: string | null
-          name: string
-          updated_at: string
-          yacht_id: string | null
-        }
-        Insert: {
-          certificate_number?: string | null
-          created_at?: string
-          document_url?: string | null
-          expiry_date?: string | null
-          id?: string
-          issue_date?: string | null
-          issuer?: string | null
-          name: string
-          updated_at?: string
-          yacht_id?: string | null
-        }
-        Update: {
-          certificate_number?: string | null
-          created_at?: string
-          document_url?: string | null
-          expiry_date?: string | null
-          id?: string
-          issue_date?: string | null
-          issuer?: string | null
-          name?: string
-          updated_at?: string
-          yacht_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "certificates_yacht_id_fkey"
-            columns: ["yacht_id"]
-            isOneToOne: false
-            referencedRelation: "yachts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      crew_members: {
-        Row: {
-          certifications: Json | null
-          created_at: string
-          email: string | null
-          emergency_contact: Json | null
-          first_name: string | null
-          id: string
-          last_name: string | null
-          position: string | null
-          updated_at: string
-          user_id: string | null
-          yacht_id: string | null
-        }
-        Insert: {
-          certifications?: Json | null
-          created_at?: string
-          email?: string | null
-          emergency_contact?: Json | null
-          first_name?: string | null
-          id?: string
-          last_name?: string | null
-          position?: string | null
-          updated_at?: string
-          user_id?: string | null
-          yacht_id?: string | null
-        }
-        Update: {
-          certifications?: Json | null
-          created_at?: string
-          email?: string | null
-          emergency_contact?: Json | null
-          first_name?: string | null
-          id?: string
-          last_name?: string | null
-          position?: string | null
-          updated_at?: string
-          user_id?: string | null
-          yacht_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "crew_members_yacht_id_fkey"
-            columns: ["yacht_id"]
-            isOneToOne: false
-            referencedRelation: "yachts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      document_ai_field_mappings: {
-        Row: {
-          ai_field_name: string
-          approved_at: string | null
-          approved_by: string | null
-          confidence_threshold: number | null
-          created_at: string | null
-          created_by: string | null
-          document_type: string
-          field_type: string | null
-          id: string
-          is_active: boolean | null
-          is_approved: boolean | null
-          mapping_metadata: Json | null
-          mapping_name: string
-          processor_id: string
-          updated_at: string | null
-          validation_rules: Json | null
-          yacht_field_key: string
-        }
-        Insert: {
-          ai_field_name: string
-          approved_at?: string | null
-          approved_by?: string | null
-          confidence_threshold?: number | null
+          config_value?: Json
           created_at?: string | null
           created_by?: string | null
-          document_type: string
-          field_type?: string | null
+          description?: string | null
           id?: string
-          is_active?: boolean | null
-          is_approved?: boolean | null
-          mapping_metadata?: Json | null
-          mapping_name: string
-          processor_id: string
+          is_sensitive?: boolean | null
           updated_at?: string | null
-          validation_rules?: Json | null
-          yacht_field_key: string
-        }
-        Update: {
-          ai_field_name?: string
-          approved_at?: string | null
-          approved_by?: string | null
-          confidence_threshold?: number | null
-          created_at?: string | null
-          created_by?: string | null
-          document_type?: string
-          field_type?: string | null
-          id?: string
-          is_active?: boolean | null
-          is_approved?: boolean | null
-          mapping_metadata?: Json | null
-          mapping_name?: string
-          processor_id?: string
-          updated_at?: string | null
-          validation_rules?: Json | null
-          yacht_field_key?: string
+          updated_by?: string | null
         }
         Relationships: []
       }
-      equipment: {
+      analytics_events: {
         Row: {
-          category: string | null
           created_at: string
+          event_data: Json | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          module: string
+          severity: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          module: string
+          severity?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          module?: string
+          severity?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      audit_workflows: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
           description: string | null
           id: string
-          installation_date: string | null
-          last_maintenance_date: string | null
-          manufacturer: string | null
-          model: string | null
+          is_active: boolean | null
           name: string
-          next_maintenance_date: string | null
-          serial_number: string | null
-          updated_at: string
-          yacht_id: string | null
+          schedule_config: Json | null
+          updated_at: string | null
+          updated_by: string | null
+          workflow_config: Json
         }
         Insert: {
-          category?: string | null
-          created_at?: string
+          created_at?: string | null
+          created_by?: string | null
           description?: string | null
           id?: string
-          installation_date?: string | null
-          last_maintenance_date?: string | null
-          manufacturer?: string | null
-          model?: string | null
+          is_active?: boolean | null
           name: string
-          next_maintenance_date?: string | null
-          serial_number?: string | null
-          updated_at?: string
-          yacht_id?: string | null
+          schedule_config?: Json | null
+          updated_at?: string | null
+          updated_by?: string | null
+          workflow_config?: Json
         }
         Update: {
-          category?: string | null
-          created_at?: string
+          created_at?: string | null
+          created_by?: string | null
           description?: string | null
           id?: string
-          installation_date?: string | null
-          last_maintenance_date?: string | null
-          manufacturer?: string | null
-          model?: string | null
+          is_active?: boolean | null
           name?: string
-          next_maintenance_date?: string | null
-          serial_number?: string | null
-          updated_at?: string
-          yacht_id?: string | null
+          schedule_config?: Json | null
+          updated_at?: string | null
+          updated_by?: string | null
+          workflow_config?: Json
         }
-        Relationships: [
-          {
-            foreignKeyName: "equipment_yacht_id_fkey"
-            columns: ["yacht_id"]
-            isOneToOne: false
-            referencedRelation: "yacht_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      inventory_alerts: {
+      edge_function_health: {
         Row: {
-          alert_type: string
           created_at: string
-          dismissed: boolean | null
+          error: Json | null
+          function_name: string
           id: string
-          item_id: string | null
-          message: string
-          updated_at: string
+          last_checked_at: string
+          latency_ms: number | null
+          metadata: Json | null
+          region: string | null
+          status: string
+          version: string | null
         }
         Insert: {
-          alert_type: string
           created_at?: string
-          dismissed?: boolean | null
+          error?: Json | null
+          function_name: string
           id?: string
-          item_id?: string | null
-          message: string
-          updated_at?: string
+          last_checked_at?: string
+          latency_ms?: number | null
+          metadata?: Json | null
+          region?: string | null
+          status: string
+          version?: string | null
         }
         Update: {
-          alert_type?: string
           created_at?: string
-          dismissed?: boolean | null
+          error?: Json | null
+          function_name?: string
           id?: string
-          item_id?: string | null
-          message?: string
-          updated_at?: string
+          last_checked_at?: string
+          latency_ms?: number | null
+          metadata?: Json | null
+          region?: string | null
+          status?: string
+          version?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "inventory_alerts_item_id_fkey"
-            columns: ["item_id"]
-            isOneToOne: false
-            referencedRelation: "inventory_items"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      edge_function_settings: {
+        Row: {
+          created_at: string
+          department: string | null
+          enabled: boolean | null
+          feature_flag: string | null
+          function_name: string
+          id: string
+          timeout_ms: number | null
+          updated_at: string
+          verify_jwt: boolean | null
+          warm_schedule: string | null
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          enabled?: boolean | null
+          feature_flag?: string | null
+          function_name: string
+          id?: string
+          timeout_ms?: number | null
+          updated_at?: string
+          verify_jwt?: boolean | null
+          warm_schedule?: string | null
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          enabled?: boolean | null
+          feature_flag?: string | null
+          function_name?: string
+          id?: string
+          timeout_ms?: number | null
+          updated_at?: string
+          verify_jwt?: boolean | null
+          warm_schedule?: string | null
+        }
+        Relationships: []
+      }
+      event_bus: {
+        Row: {
+          created_at: string
+          department: string | null
+          event_type: string
+          id: string
+          module: string | null
+          payload: Json | null
+          severity: string | null
+          source: string | null
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          event_type: string
+          id?: string
+          module?: string | null
+          payload?: Json | null
+          severity?: string | null
+          source?: string | null
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          event_type?: string
+          id?: string
+          module?: string | null
+          payload?: Json | null
+          severity?: string | null
+          source?: string | null
+        }
+        Relationships: []
       }
       inventory_items: {
         Row: {
           category: string | null
-          created_at: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
           id: string
           location: string | null
+          metadata: Json | null
           name: string
-          notes: string | null
           quantity: number | null
-          unit: string | null
-          updated_at: string
+          total_value: number | null
+          unit_price: number | null
+          updated_at: string | null
+          updated_by: string | null
           yacht_id: string | null
         }
         Insert: {
           category?: string | null
-          created_at?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
           id?: string
           location?: string | null
+          metadata?: Json | null
           name: string
-          notes?: string | null
           quantity?: number | null
-          unit?: string | null
-          updated_at?: string
+          total_value?: number | null
+          unit_price?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
           yacht_id?: string | null
         }
         Update: {
           category?: string | null
-          created_at?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
           id?: string
           location?: string | null
+          metadata?: Json | null
           name?: string
-          notes?: string | null
           quantity?: number | null
-          unit?: string | null
-          updated_at?: string
+          total_value?: number | null
+          unit_price?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
           yacht_id?: string | null
+        }
+        Relationships: []
+      }
+      llm_provider_models: {
+        Row: {
+          capabilities: Json | null
+          created_at: string
+          fetched_at: string
+          id: string
+          model_id: string
+          model_name: string
+          provider_id: string
+        }
+        Insert: {
+          capabilities?: Json | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          model_id: string
+          model_name: string
+          provider_id: string
+        }
+        Update: {
+          capabilities?: Json | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          model_id?: string
+          model_name?: string
+          provider_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "inventory_items_yacht_id_fkey"
-            columns: ["yacht_id"]
+            foreignKeyName: "llm_provider_models_provider_id_fkey"
+            columns: ["provider_id"]
             isOneToOne: false
-            referencedRelation: "yachts"
+            referencedRelation: "ai_providers_unified"
             referencedColumns: ["id"]
           },
         ]
       }
-      system_settings: {
+      role_permissions: {
         Row: {
-          created_at: string
+          action: string
+          conditions: Json | null
+          created_at: string | null
           id: string
-          is_active: boolean | null
-          setting_key: string
-          setting_value: Json | null
-          updated_at: string
-          yacht_id: string | null
+          permission: string
+          resource: string | null
+          role: string
         }
         Insert: {
-          created_at?: string
+          action: string
+          conditions?: Json | null
+          created_at?: string | null
           id?: string
-          is_active?: boolean | null
-          setting_key: string
-          setting_value?: Json | null
-          updated_at?: string
-          yacht_id?: string | null
+          permission: string
+          resource?: string | null
+          role: string
         }
         Update: {
-          created_at?: string
+          action?: string
+          conditions?: Json | null
+          created_at?: string | null
           id?: string
-          is_active?: boolean | null
-          setting_key?: string
-          setting_value?: Json | null
-          updated_at?: string
-          yacht_id?: string | null
+          permission?: string
+          resource?: string | null
+          role?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "system_settings_yacht_id_fkey"
-            columns: ["yacht_id"]
-            isOneToOne: false
-            referencedRelation: "yachts"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      system_settings: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_public: boolean | null
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
       }
       unified_ai_configs: {
         Row: {
           config: Json
-          config_key: string
-          created_at: string | null
-          created_by: string | null
+          created_at: string
           id: string
-          is_active: boolean | null
-          updated_at: string | null
+          updated_at: string
         }
         Insert: {
           config?: Json
-          config_key: string
-          created_at?: string | null
-          created_by?: string | null
+          created_at?: string
           id?: string
-          is_active?: boolean | null
-          updated_at?: string | null
+          updated_at?: string
         }
         Update: {
           config?: Json
-          config_key?: string
-          created_at?: string | null
-          created_by?: string | null
+          created_at?: string
           id?: string
-          is_active?: boolean | null
-          updated_at?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
-      unified_ai_logs: {
+      user_profiles: {
         Row: {
-          action: string | null
-          correlation_id: string | null
-          cost_estimate_usd: number | null
+          avatar_url: string | null
           created_at: string | null
-          details: Json | null
-          error_message: string | null
+          department: string | null
+          display_name: string | null
           id: string
-          latency_ms: number | null
-          provider: string | null
-          success: boolean | null
+          job_title: string | null
+          last_active_at: string | null
+          onboarding_completed: boolean | null
+          phone: string | null
+          preferences: Json | null
+          timezone: string | null
+          updated_at: string | null
+          user_id: string
         }
         Insert: {
-          action?: string | null
-          correlation_id?: string | null
-          cost_estimate_usd?: number | null
+          avatar_url?: string | null
           created_at?: string | null
-          details?: Json | null
-          error_message?: string | null
+          department?: string | null
+          display_name?: string | null
           id?: string
-          latency_ms?: number | null
-          provider?: string | null
-          success?: boolean | null
+          job_title?: string | null
+          last_active_at?: string | null
+          onboarding_completed?: boolean | null
+          phone?: string | null
+          preferences?: Json | null
+          timezone?: string | null
+          updated_at?: string | null
+          user_id: string
         }
         Update: {
-          action?: string | null
-          correlation_id?: string | null
-          cost_estimate_usd?: number | null
+          avatar_url?: string | null
           created_at?: string | null
-          details?: Json | null
-          error_message?: string | null
+          department?: string | null
+          display_name?: string | null
           id?: string
-          latency_ms?: number | null
-          provider?: string | null
-          success?: boolean | null
+          job_title?: string | null
+          last_active_at?: string | null
+          onboarding_completed?: boolean | null
+          phone?: string | null
+          preferences?: Json | null
+          timezone?: string | null
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
       user_roles: {
         Row: {
-          created_at: string
+          created_at: string | null
+          created_by: string | null
           id: string
+          is_active: boolean | null
           role: string
-          updated_at: string
+          updated_at: string | null
           user_id: string
-          yacht_id: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
+          created_by?: string | null
           id?: string
-          role?: string
-          updated_at?: string
+          is_active?: boolean | null
+          role: string
+          updated_at?: string | null
           user_id: string
-          yacht_id?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
+          created_by?: string | null
           id?: string
+          is_active?: boolean | null
           role?: string
-          updated_at?: string
+          updated_at?: string | null
           user_id?: string
-          yacht_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_roles_yacht_id_fkey"
-            columns: ["yacht_id"]
-            isOneToOne: false
-            referencedRelation: "yachts"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       yacht_profiles: {
         Row: {
-          created_at: string
+          created_at: string | null
           id: string
+          is_active: boolean | null
           owner_id: string | null
           profile_data: Json | null
-          updated_at: string
-          yacht_id: string
+          profile_name: string
+          updated_at: string | null
+          yacht_id: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           id?: string
+          is_active?: boolean | null
           owner_id?: string | null
           profile_data?: Json | null
-          updated_at?: string
-          yacht_id: string
+          profile_name: string
+          updated_at?: string | null
+          yacht_id?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           id?: string
+          is_active?: boolean | null
           owner_id?: string | null
           profile_data?: Json | null
-          updated_at?: string
-          yacht_id?: string
+          profile_name?: string
+          updated_at?: string | null
+          yacht_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "yacht_profiles_yacht_id_fkey"
             columns: ["yacht_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "yachts"
             referencedColumns: ["id"]
           },
@@ -670,28 +766,40 @@ export type Database = {
       }
       yachts: {
         Row: {
-          created_at: string
+          created_at: string | null
+          flag_state: string | null
           id: string
+          length_meters: number | null
+          metadata: Json | null
           name: string
-          owner_name: string | null
-          registration_number: string | null
-          updated_at: string
+          owner_id: string | null
+          type: string | null
+          updated_at: string | null
+          year_built: number | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
+          flag_state?: string | null
           id?: string
+          length_meters?: number | null
+          metadata?: Json | null
           name: string
-          owner_name?: string | null
-          registration_number?: string | null
-          updated_at?: string
+          owner_id?: string | null
+          type?: string | null
+          updated_at?: string | null
+          year_built?: number | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
+          flag_state?: string | null
           id?: string
+          length_meters?: number | null
+          metadata?: Json | null
           name?: string
-          owner_name?: string | null
-          registration_number?: string | null
-          updated_at?: string
+          owner_id?: string | null
+          type?: string | null
+          updated_at?: string | null
+          year_built?: number | null
         }
         Relationships: []
       }
@@ -700,37 +808,73 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      assign_user_to_yacht: {
-        Args: {
-          target_user_id: string
-          target_yacht_id: string
-          user_role?: string
-        }
+      assign_user_role: {
+        Args:
+          | {
+              _department?: string
+              _expires_at?: string
+              _granted_by?: string
+              _role: string
+              _user_id: string
+            }
+          | {
+              _department?: string
+              _expires_at?: string
+              _granted_by?: string
+              _role: string
+              _user_id: string
+              _yacht_id?: string
+            }
         Returns: boolean
       }
-      get_user_yacht_access_detailed: {
-        Args: { target_user_id?: string }
+      check_user_permission: {
+        Args: { permission_name: string }
+        Returns: boolean
+      }
+      current_user_is_superadmin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      ensure_user_role: {
+        Args: { role_param?: string; user_id_param: string }
+        Returns: undefined
+      }
+      get_user_profile: {
+        Args: { _user_id?: string }
         Returns: {
-          access_level: string
-          permissions: Json
-          yacht_id: string
-          yacht_name: string
-          yacht_type: string
+          avatar_url: string
+          department: string
+          display_name: string
+          email: string
+          is_superadmin: boolean
+          job_title: string
+          last_active_at: string
+          onboarding_completed: boolean
+          permissions: string[]
+          roles: string[]
+          user_id: string
         }[]
       }
-      get_user_yacht_role: {
-        Args: { user_uuid?: string }
+      get_user_roles: {
+        Args: { _user_id?: string }
         Returns: {
+          department: string
+          expires_at: string
+          is_active: boolean
           role: string
-          yacht_id: string
         }[]
-      }
-      is_global_superadmin: {
-        Args: { user_id_param?: string }
-        Returns: boolean
       }
       is_superadmin: {
-        Args: { user_id_param?: string }
+        Args: Record<PropertyKey, never> | { _user_id?: string }
+        Returns: boolean
+      }
+      user_has_permission: {
+        Args: {
+          _action?: string
+          _permission: string
+          _resource?: string
+          _user_id?: string
+        }
         Returns: boolean
       }
     }
@@ -861,6 +1005,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

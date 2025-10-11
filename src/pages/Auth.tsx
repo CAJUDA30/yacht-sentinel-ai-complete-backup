@@ -24,16 +24,22 @@ const Auth = () => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        navigate('/');
+        console.log('[Auth] User already logged in, redirecting to home');
+        navigate('/', { replace: true });
       }
     };
 
     checkUser();
 
-    // Listen for auth changes
+    // Listen for auth changes with immediate redirect
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        navigate('/');
+      console.log('[Auth] Auth state changed:', event);
+      if (event === 'SIGNED_IN' && session) {
+        console.log('[Auth] User signed in, immediate redirect to home');
+        // Use replace to prevent back button from returning to auth page
+        setTimeout(() => {
+          navigate('/', { replace: true });
+        }, 100); // Small delay to ensure state is updated
       }
     });
 
@@ -47,27 +53,33 @@ const Auth = () => {
     setMessage('');
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log('[Auth] Attempting login with:', email);
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
+      console.log('[Auth] Sign in response:', { data, error });
+
       if (error) {
+        console.error('[Auth] Sign in error:', error);
         if (error.message.includes('Invalid login credentials')) {
           setError('Invalid email or password. Please check your credentials and try again.');
         } else if (error.message.includes('Email not confirmed')) {
           setError('Please confirm your email address before signing in.');
         } else {
-          setError(error.message);
+          setError(`Authentication error: ${error.message}`);
         }
       } else {
+        console.log('[Auth] Sign in successful');
         toast({
           title: "Welcome back!",
           description: "You've been successfully signed in.",
         });
       }
-    } catch (error) {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (error: any) {
+      console.error('[Auth] Sign in exception:', error);
+      setError(`Unexpected error: ${error?.message || error || 'Unknown error occurred'}`);
     } finally {
       setLoading(false);
     }
@@ -120,9 +132,9 @@ const Auth = () => {
     setLoading(true);
     setError('');
     
-    // Demo credentials
-    const demoEmail = 'demo@yachtexcel.com';
-    const demoPassword = 'demo123456';
+    // Superadmin credentials
+    const demoEmail = 'superadmin@yachtexcel.com';
+    const demoPassword = 'admin123'; // Correct password
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -131,32 +143,21 @@ const Auth = () => {
       });
 
       if (error) {
-        // If demo user doesn't exist, create it
-        const { error: signUpError } = await supabase.auth.signUp({
-          email: demoEmail,
-          password: demoPassword,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`
-          }
-        });
-
-        if (signUpError) {
-          setError('Failed to create demo account. Please try manual sign up.');
-        } else {
-          setMessage('Demo account created! Please check email to confirm, or try signing in directly.');
-        }
+        setError('Please create the superadmin user first or use manual signup.');
       } else {
         toast({
-          title: "Demo access granted!",
-          description: "Welcome to YachtExcel demo.",
+          title: "Welcome back!",
+          description: "Successfully signed in as superadmin.",
         });
       }
     } catch (error) {
-      setError('Failed to access demo account.');
+      setError('Authentication failed.');
     } finally {
       setLoading(false);
     }
   };
+
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
@@ -273,6 +274,7 @@ const Auth = () => {
                 </Button>
               </form>
             </TabsContent>
+
           </Tabs>
 
           {error && (
@@ -301,14 +303,14 @@ const Auth = () => {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Accessing Demo...
+                  Signing in...
                 </>
               ) : (
-                'Try Demo Account'
+                'Quick Superadmin Login'
               )}
             </Button>
             <p className="text-xs text-muted-foreground text-center mt-2">
-              Quick access with demo@yachtexcel.com
+              Email: superadmin@yachtexcel.com | Password: admin123
             </p>
           </div>
         </CardContent>

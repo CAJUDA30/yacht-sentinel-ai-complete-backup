@@ -17,7 +17,7 @@ export const SuperadminFixButton: React.FC = () => {
       
       // Since metadata already shows the correct role, just test table access
       const { count, error: tableError } = await supabase
-        .from('user_roles')
+        .from('user_roles' as any)
         .select('*', { count: 'exact', head: true });
       
       if (tableError) {
@@ -30,7 +30,7 @@ export const SuperadminFixButton: React.FC = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user?.email === 'superadmin@yachtexcel.com') {
           const { error: insertError } = await supabase
-            .from('user_roles')
+            .from('user_roles' as any)
             .upsert({
               user_id: session.user.id,
               role: 'global_superadmin',

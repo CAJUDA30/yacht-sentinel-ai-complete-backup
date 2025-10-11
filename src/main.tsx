@@ -17,8 +17,23 @@ import { PerformanceProvider } from "@/contexts/PerformanceContext";
 import { UnifiedSettingsProvider } from "@/contexts/UnifiedSettingsContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { checkAndInvalidateCache } from "@/utils/cacheInvalidation";
 import App from "./App.tsx";
 import "./index.css";
+
+// =============================================================================
+// AUTOMATIC CACHE INVALIDATION
+// =============================================================================
+// Clear localStorage/sessionStorage when app version changes
+// This ensures users always see latest code after updates
+const cacheWasCleared = checkAndInvalidateCache();
+if (cacheWasCleared) {
+  console.log('[App] 🔄 Cache cleared due to version update - reloading...');
+  // Give a moment for logs to flush, then reload
+  setTimeout(() => {
+    window.location.reload();
+  }, 100);
+}
 
 // =============================================================================
 // SYSTEMATIC CONSOLE MANAGEMENT SYSTEM

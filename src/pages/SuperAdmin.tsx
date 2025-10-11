@@ -58,18 +58,15 @@ export default function SuperAdminPage() {
                                user?.id === 'c4ca4238-a0b9-23e4-b8a2-c3e4f5e67890';
   const effectiveIsSuper = isSuper || isSuperadminByEmail || isSuperadminByMetadata || isSuperadminByUserId;
   
-  console.log('[SuperAdmin Page] Enhanced auth state:', {
-    userEmail: user?.email,
-    userId: user?.id,
-    userMetadata: user?.user_metadata,
-    appMetadata: user?.app_metadata,
-    isSuper,
-    isSuperadminByEmail,
-    isSuperadminByMetadata,
-    isSuperadminByUserId,
-    effectiveIsSuper,
-    loading: { authLoading, roleLoading }
-  });
+  // Only log once on mount or when auth state actually changes
+  React.useEffect(() => {
+    if (user && !authLoading && !roleLoading) {
+      console.log('[SuperAdmin Page] Auth verified:', {
+        email: user?.email,
+        isSuper: effectiveIsSuper
+      });
+    }
+  }, [user?.id, effectiveIsSuper]); // Only log when user ID or super status changes
 
   const { status, testAll } = useUnifiedAIConfig();
   const [testing, setTesting] = React.useState(false);
@@ -227,12 +224,9 @@ export default function SuperAdminPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-semibold text-gray-900 mb-2">Developer Configuration</h1>
-            <p className="text-gray-600">Advanced system configuration and AI management tools</p>
+            <p className="text-gray-600">Advanced system configuration and AI management tools for enterprise environments</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="px-3 py-1 bg-blue-50 border border-blue-200 rounded-full">
-              <span className="text-sm font-medium text-blue-700">SuperAdmin</span>
-            </div>
             <Button variant="ghost" size="sm" onClick={() => signOut()} className="text-gray-600 hover:text-gray-900">
               <LogOut className="h-4 w-4 mr-2" /> 
               Sign out

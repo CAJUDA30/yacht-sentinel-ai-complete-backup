@@ -278,15 +278,16 @@ class StartupHealthService {
 
       // Basic validation
       if (!config.api_endpoint) {
-        debugConsole.error('STARTUP_HEALTH', `❌ Provider ${provider.name} missing API endpoint`, {
-          config_keys: Object.keys(config)
+        debugConsole.warn('STARTUP_HEALTH', `⚠️  Provider ${provider.name} missing API endpoint (configure in AI Settings)`, {
+          config_keys: Object.keys(config),
+          note: 'This is expected in development until AI providers are configured'
         }, provider.id, provider.name);
         return {
           providerId: provider.id,
           providerName: provider.name,
           providerType: provider.provider_type,
           isHealthy: false,
-          error: 'Missing API endpoint configuration'
+          error: 'Not configured - add API endpoint in AI Settings'
         };
       }
 

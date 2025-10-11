@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useSuperAdmin } from '@/contexts/SuperAdminContext';
+import { useSuperAdmin } from '@/contexts/UserRoleContext';
 
 /**
  * DEBUG COMPONENT - Use temporarily to diagnose superadmin role issues
@@ -31,12 +31,12 @@ export const SuperAdminDebug: React.FC = () => {
         dbFunctionError = e;
       }
 
-      // Check user_roles table directly
+      // Check user_roles table directly with type assertion
       let userRolesResult = null;
       let userRolesError = null;
       try {
         const { data, error } = await supabase
-          .from('user_roles')
+          .from('user_roles' as any)
           .select('role, created_at')
           .eq('user_id', user.id);
         userRolesResult = data;

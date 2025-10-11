@@ -9,6 +9,7 @@ import { AITableAutoSetup } from '@/services/aiTableAutoSetup';
 import { startupHealthService } from '@/services/startupHealthService';
 import { debugConsole } from '@/services/debugConsole';
 import { supabase } from '@/integrations/supabase/client';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 
 interface InitializationState {
   isInitializing: boolean;
@@ -22,6 +23,7 @@ interface InitializationState {
 
 export function useAISystemInitialization() {
   const { toast } = useToast();
+  const { isAuthenticated, loading: authLoading } = useSupabaseAuth();
   const [state, setState] = useState<InitializationState>({
     isInitializing: false,
     isInitialized: false,
@@ -40,9 +42,6 @@ export function useAISystemInitialization() {
       
       if (setupResult.success) {
         debugConsole.success('AI_INIT', '✅ AI system setup completed');
-        
-        // Add a small delay to ensure all provider data is fully loaded
-        await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Verify that provider configurations are properly loaded
         const { data: loadedProviders } = await supabase
@@ -143,8 +142,20 @@ export function useAISystemInitialization() {
   };
 
   useEffect(() => {
+    // IMPORTANT: Only initialize AI system AFTER user is authenticated
+    if (!isAuthenticated || authLoading) {
+      debugConsole.info('SYSTEM', '⏳ Waiting for AI system to be ready', {
+        enabled: true,
+        loading: authLoading,
+        aiInitializing: state.isInitializing,
+        aiInitialized: state.isInitialized
+      });
+      return;
+    }
+    
+    // User is authenticated, safe to initialize AI system
     initializeSystem();
-  }, []);
+  }, [isAuthenticated, authLoading]); // Run when auth state changes
 
   return {
     ...state,

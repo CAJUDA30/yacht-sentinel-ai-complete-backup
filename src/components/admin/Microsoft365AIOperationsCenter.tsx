@@ -1201,12 +1201,6 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                     <h1 className="text-3xl font-bold text-neutral-900 tracking-tight mb-2 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-700 bg-clip-text text-transparent">Developer Configuration</h1>
                     <p className="text-base text-neutral-600 font-medium leading-relaxed">Advanced system configuration and AI management tools for enterprise environments</p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 bg-gradient-to-br from-neutral-100/80 to-neutral-200/60 rounded-xl backdrop-blur-sm">
-                      <div className="text-xl font-bold text-neutral-800">{systemMetrics.totalProviders + processors.length}</div>
-                      <div className="text-xs text-neutral-600 font-medium">Active Services</div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>

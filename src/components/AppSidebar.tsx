@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAppSettings } from "@/contexts/AppSettingsContext";
-import { useSuperAdmin } from "@/contexts/SuperAdminContext";
+import { useSuperAdmin } from "@/contexts/UserRoleContext";
 import {
   Sidebar,
   SidebarContent,

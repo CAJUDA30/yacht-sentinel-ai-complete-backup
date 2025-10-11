@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw, User, Database, Settings, RotateCcw } from 'lucide-react';
-import { useSuperAdmin } from '@/contexts/SuperAdminContext';
+import { useSuperAdmin } from '@/contexts/UserRoleContext';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
 import { useYacht } from '@/contexts/YachtContext';
 import { SuperadminFixButton } from './SuperadminFixButton';
@@ -87,7 +87,7 @@ export const UserRoleDebugPanel: React.FC = () => {
       try {
         // Test basic table access with count only to avoid TypeScript issues
         const { count, error: countError } = await supabase
-          .from('user_roles')
+          .from('user_roles' as any)
           .select('*', { count: 'exact', head: true });
         
         if (countError) {

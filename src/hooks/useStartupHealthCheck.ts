@@ -15,6 +15,7 @@ interface UseStartupHealthCheckOptions {
   delay?: number; // Delay in ms before running health check
   runOnLogin?: boolean;
   runOnAppStart?: boolean;
+  nonBlocking?: boolean; // If true, don't wait for health checks to complete
 }
 
 // Global state to prevent multiple concurrent health checks
@@ -24,9 +25,10 @@ let globalHealthCheckInitialized = false;
 export function useStartupHealthCheck(options: UseStartupHealthCheckOptions = {}) {
   const {
     enabled = true,
-    delay = 5000, // 5 second delay after AI initialization to ensure all systems are ready
+    delay = 15000, // 15 second delay to avoid blocking initial page load
     runOnLogin = true,
-    runOnAppStart = true
+    runOnAppStart = true,
+    nonBlocking = true // Default to non-blocking for better UX
   } = options;
 
   const { user, session, loading } = useSupabaseAuth();
