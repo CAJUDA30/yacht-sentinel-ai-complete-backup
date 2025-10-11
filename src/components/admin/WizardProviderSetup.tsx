@@ -156,7 +156,7 @@ const PROVIDER_TEMPLATES: Record<string, Partial<EnhancedProviderConfig> & {
   google: {
     name: 'Google Gemini',
     provider_type: 'google',
-    api_endpoint: 'https://generativelanguage.googleapis.com/v1',
+    api_endpoint: 'https://generativelanguage.googleapis.com/v1beta',
     auth_method: 'api_key',
     capabilities: ['text_generation', 'vision', 'multimodal', 'code_generation'],
     specialization: 'general',
@@ -284,49 +284,49 @@ export const WizardProviderSetup: React.FC<WizardProviderSetupProps> = ({
 
     const startTime = performance.now();
     try {
-      // Real-time connection test with latency monitoring
-      const response = await fetch(provider.api_endpoint + '/models', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${provider.api_key.trim()}`,
-          'Accept': 'application/json'
-        },
-        signal: AbortSignal.timeout(15000)
-      });
+      // Use the enhanced testProviderConnection function that handles all provider types
+      const testProvider = {
+        id: 'test-provider',
+        name: provider.name || 'Test Provider',
+        provider_type: provider.provider_type,
+        api_endpoint: provider.api_endpoint,
+        configuration: {
+          auth_method: provider.auth_method
+        }
+      };
+      
+      // Import the enhanced testProviderConnection function
+      const { testProviderConnection } = await import('@/services/debugConsole');
+      const result = await testProviderConnection(testProvider, provider.api_key.trim());
       
       const latency = Math.round(performance.now() - startTime);
-      setConnectionLatency(latency);
+      setConnectionLatency(result.latency || latency);
       
-      if (response.ok || response.status === 401 || response.status === 403) {
+      if (result.success) {
         setConnectionTested(true);
         
-        // Apple-style success notification with performance metrics
+        // Success notification with performance metrics
         toast({
           title: '✨ Connection Successful',
-          description: `API endpoint reachable • ${latency}ms latency • Ready for model discovery`,
+          description: `API endpoint reachable • ${result.latency || latency}ms latency • Ready for model discovery`,
           duration: 4000
         });
         
         // Auto-advance to next step
         setTimeout(() => setWizardStep(2), 1500);
         return true;
+      } else {
+        toast({
+          title: '❌ Connection Failed',
+          description: result.error || 'Unable to reach API endpoint',
+          variant: 'destructive'
+        });
+        return false;
       }
-      return false;
     } catch (error: any) {
       setConnectionLatency(null);
       
-      if (window.location.hostname === 'localhost') {
-        // Development mode bypass with warning
-        setConnectionTested(true);
-        toast({
-          title: '🛠️ Development Mode',
-          description: 'Connection test bypassed for local development • Real API testing disabled',
-          duration: 4000
-        });
-        setTimeout(() => setWizardStep(2), 1500);
-        return true;
-      }
-      
+      // Always show real error - no development mode bypass
       toast({
         title: '❌ Connection Failed',
         description: `Unable to reach API endpoint: ${error.message}`,
@@ -430,15 +430,55 @@ export const WizardProviderSetup: React.FC<WizardProviderSetupProps> = ({
       // Generate unique provider ID to fix undefined issue
       const providerId = `provider_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
+      // Create unified provider data structure compatible with ProviderConfigurationModal
       const providerData = {
         id: providerId,
         name: provider.name,
         provider_type: provider.provider_type,
+        api_endpoint: provider.api_endpoint,
         auth_method: provider.auth_method,
         capabilities: provider.capabilities,
         is_active: provider.is_active,
+        configuration: {
+          // Core configuration
+          api_key: provider.api_key, // Store API key for unified system
+          auth_method: provider.auth_method,
+          capabilities: provider.capabilities,
+          specialization: provider.specialization,
+          selected_models: provider.selected_models,
+          discovered_models: discoveredModels.map(m => m.id || m), // Ensure string format
+          
+          // Model configuration
+          selected_model: provider.selected_model,
+          model_limits: {},
+          custom_headers: {},
+          timeout: provider.timeout,
+          max_tokens: provider.max_tokens,
+          temperature: provider.temperature,
+          
+          // Unified system metadata
+          last_model_detection: new Date().toISOString(),
+          last_updated: new Date().toISOString(),
+          wizard_created: true, // Mark as created by wizard
+          
+          // Wizard data for synchronization with ProviderConfigurationModal
+          wizard_data: {
+            initial_models: provider.selected_models,
+            setup_date: new Date().toISOString(),
+            setup_user: 'current_user', // Could be enhanced with actual user ID
+            template_used: selectedTemplate,
+            connection_tested: connectionTested,
+            connection_latency: connectionLatency,
+            specialization: provider.specialization,
+            environment: provider.environment,
+            wizard_version: '3.0_unified'
+          }
+        },
+        
+        // Legacy config structure for backward compatibility
         config: {
           id: providerId,
+          api_endpoint: provider.api_endpoint,
           endpoints: {
             chat: provider.api_endpoint + '/chat/completions',
             test: provider.api_endpoint + '/models'
@@ -449,10 +489,10 @@ export const WizardProviderSetup: React.FC<WizardProviderSetupProps> = ({
             secret_name: provider.api_key
           },
           defaults: {
-            temperature: 0.1,
-            max_tokens: 2000,
-            timeout: 60000,
-            max_retries: 3,
+            temperature: provider.temperature || 0.1,
+            max_tokens: provider.max_tokens || 2000,
+            timeout: provider.timeout || 60000,
+            max_retries: provider.max_retries || 3,
             model: provider.selected_model
           },
           enhanced: {
@@ -460,24 +500,47 @@ export const WizardProviderSetup: React.FC<WizardProviderSetupProps> = ({
             description: provider.description,
             wizard_completed: true,
             created_at: new Date().toISOString()
-          }
-        }
+          },
+          // Include selected models in legacy format
+          selected_models: provider.selected_models,
+          discovered_models: discoveredModels
+        },
+        
+        // Timestamps
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
+      
+      console.log('🎨 Creating unified provider with structure:', {
+        id: providerId,
+        name: provider.name,
+        provider_type: provider.provider_type,
+        has_configuration: !!providerData.configuration,
+        has_wizard_data: !!providerData.configuration.wizard_data,
+        selected_models_count: provider.selected_models.length,
+        discovered_models_count: discoveredModels.length,
+        wizard_created: providerData.configuration.wizard_created,
+        compatibility: 'ProviderConfigurationModal_ready'
+      });
 
       await onProviderCreate(providerData);
       
-      // Store enhanced configuration for persistence
-      localStorage.setItem(`enhanced_provider_${providerId}`, JSON.stringify({
+      // Store enhanced configuration for persistence and debugging
+      localStorage.setItem(`unified_provider_${providerId}`, JSON.stringify({
         id: providerId,
-        ...provider,
-        created_at: new Date().toISOString(),
-        wizard_completed: true
+        ...providerData,
+        debug_info: {
+          created_via: 'WizardProviderSetup',
+          unified_structure: true,
+          config_modal_compatible: true,
+          wizard_sync_enabled: true
+        }
       }));
       
       toast({
-        title: 'Provider Created Successfully 🚀',
-        description: `${provider.name} is ready for use`,
-        duration: 5000
+        title: '🚀 Unified Provider Created Successfully',
+        description: `${provider.name} is ready with ${provider.selected_models.length} models and full synchronization support`,
+        duration: 6000
       });
 
       // Navigate to visual mapping if mapping specialization

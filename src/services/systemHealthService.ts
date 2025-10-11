@@ -54,6 +54,7 @@ export interface ProcessorHealthDetails {
   lastChecked: Date;
   responseTime?: number;
   error?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface DatabaseHealthStatus {
@@ -292,32 +293,54 @@ class SystemHealthService {
       });
 
       if (error) {
-        debugConsole.warn('SYSTEM_HEALTH', 'Processor health check failed, using development mode', { error: error.message });
-        
-        // Check if it's a credential/auth issue (development environment)
+        // Enhanced error classification for better development experience
         const isDevelopmentMode = error.message?.includes('forbidden') || 
                                  error.message?.includes('credentials') ||
                                  error.message?.includes('Invalid JWT') ||
-                                 error.message?.includes('Failed to send a request to the Edge Function');
+                                 error.message?.includes('Failed to send a request to the Edge Function') ||
+                                 error.message?.includes('fetch failed') ||
+                                 error.message?.includes('NetworkError') ||
+                                 error.message?.includes('Connection refused');
         
         if (isDevelopmentMode) {
-          debugConsole.info('SYSTEM_HEALTH', 'Running in development mode - processors marked as healthy');
+          debugConsole.error('SYSTEM_HEALTH', 'Google Cloud credentials not configured', {
+            error: error.message,
+            requiredFiles: ['supabase/.env.local'],
+            requiredVars: ['GOOGLE_SERVICE_ACCOUNT_JSON', 'GOOGLE_CLOUD_PROJECT_ID', 'DOCUMENT_AI_PROCESSOR_ID']
+          });
           return {
             total: 1,
-            healthy: 1,
-            unhealthy: 0,
+            healthy: 0,
+            unhealthy: 1,
             processors: [{
-              id: 'document-ai-processor-dev',
-              name: 'Document AI Processor (Development Mode)',
-              status: 'healthy',
+              id: 'document-ai-processor',
+              name: 'Document AI Processor',
+              status: 'critical',
               lastChecked: new Date(),
-              responseTime: 50,
-              error: undefined
+              error: 'Google Cloud credentials not configured',
+              metadata: {
+                errorCategory: 'missing_configuration',
+                troubleshooting: [
+                  'Create supabase/.env.local file',
+                  'Add GOOGLE_SERVICE_ACCOUNT_JSON with service account key',
+                  'Add GOOGLE_CLOUD_PROJECT_ID=yachtexcel1',
+                  'Add DOCUMENT_AI_PROCESSOR_ID=8708cd1d9cd87cc1',
+                  'See GOOGLE_CLOUD_SETUP.md for detailed instructions'
+                ],
+                configurationRequired: true,
+                setupGuide: 'GOOGLE_CLOUD_SETUP.md'
+              }
             }]
           };
         }
         
-        // For other errors, mark as critical
+        // For unexpected errors, provide more detailed information
+        debugConsole.warn('SYSTEM_HEALTH', 'Processor health check failed with unexpected error', { 
+          error: error.message,
+          errorType: typeof error,
+          suggestion: 'Check edge function deployment and credentials'
+        });
+        
         return {
           total: 1,
           healthy: 0,
@@ -327,7 +350,11 @@ class SystemHealthService {
             name: 'Document AI Processor',
             status: 'critical',
             lastChecked: new Date(),
-            error: error.message
+            error: `Edge function error: ${error.message}`,
+            metadata: {
+              errorCategory: 'edge_function_failure',
+              troubleshooting: 'Check supabase functions deployment and Google Cloud credentials'
+            }
           }]
         };
       }
@@ -337,20 +364,36 @@ class SystemHealthService {
       // Check Document AI processor
       if (data.results?.documentAI) {
         const docAI = data.results.documentAI;
+        const isHealthy = docAI.status === 'ok';
+        
         processors.push({
           id: 'document-ai-processor',
           name: docAI.processor || 'Document AI Processor',
-          status: docAI.status === 'ok' ? 'healthy' : 'critical',
+          status: isHealthy ? 'healthy' : 'critical',
           lastChecked: new Date(),
           responseTime: data.total_ms,
-          error: docAI.error
+          error: docAI.error,
+          metadata: {
+            processorId: docAI.processor,
+            configured: docAI.configured,
+            responseTime: data.total_ms,
+            status: docAI.status
+          }
         });
         
-        debugConsole.success('SYSTEM_HEALTH', `Document AI processor verified`, {
-          status: docAI.status,
-          response_time: data.total_ms,
-          processor_name: docAI.processor
-        });
+        if (isHealthy) {
+          debugConsole.success('SYSTEM_HEALTH', `Document AI processor verified`, {
+            status: docAI.status,
+            response_time: data.total_ms,
+            processor_name: docAI.processor
+          });
+        } else {
+          debugConsole.error('SYSTEM_HEALTH', `Document AI processor unhealthy`, {
+            status: docAI.status,
+            error: docAI.error,
+            processor_name: docAI.processor
+          });
+        }
       } else {
         // No processor found - create a placeholder indicating missing configuration
         processors.push({
@@ -358,11 +401,16 @@ class SystemHealthService {
           name: 'Document AI Processor',
           status: 'critical',
           lastChecked: new Date(),
-          error: 'Processor not configured or not found'
+          error: 'Processor not configured or not found',
+          metadata: {
+            issue: 'missing_processor_configuration',
+            suggestion: 'Configure Document AI processor in GCP unified config'
+          }
         });
         
         debugConsole.warn('SYSTEM_HEALTH', 'No Document AI processor found in response', {
-          response_data: data
+          response_data: data,
+          available_results: data.results ? Object.keys(data.results) : []
         });
       }
 
@@ -376,22 +424,38 @@ class SystemHealthService {
       debugConsole.info('SYSTEM_HEALTH', 'Processor health check completed', {
         total: summary.total,
         healthy: summary.healthy,
-        unhealthy: summary.unhealthy
+        unhealthy: summary.unhealthy,
+        processors: processors.map(p => ({ id: p.id, status: p.status, name: p.name }))
       });
       
       return summary;
     } catch (error: any) {
-      debugConsole.error('SYSTEM_HEALTH', 'Failed to check processors health', { error: error.message });
+      debugConsole.error('SYSTEM_HEALTH', 'Failed to check processors health', { 
+        error: error.message,
+        stack: error.stack?.split('\n').slice(0, 3).join('\n')
+      });
+      
+      // Return critical status for any errors - no fallback mode
       return {
         total: 1,
         healthy: 0,
         unhealthy: 1,
         processors: [{
-          id: 'document-ai-processor',
+          id: 'document-ai-processor-error',
           name: 'Document AI Processor',
           status: 'critical',
           lastChecked: new Date(),
-          error: error.message
+          error: `Health check failed: ${error.message}`,
+          metadata: {
+            errorCategory: 'health_check_failure',
+            originalError: error.message,
+            troubleshooting: [
+              'Check if Supabase functions are running',
+              'Verify Google Cloud credentials are configured in supabase/.env.local',
+              'Check network connectivity to Google Cloud APIs',
+              'Review function logs for detailed error information'
+            ]
+          }
         }]
       };
     }

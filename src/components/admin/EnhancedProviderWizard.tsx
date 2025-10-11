@@ -82,7 +82,7 @@ const PROVIDER_TEMPLATES: Record<string, Partial<EnhancedProviderConfig> & {
     pricing: '$15.00 per 1M tokens', models_count: 6
   },
   google: {
-    name: 'Google Gemini', provider_type: 'google', api_endpoint: 'https://generativelanguage.googleapis.com/v1', auth_method: 'api_key',
+    name: 'Google Gemini', provider_type: 'google', api_endpoint: 'https://generativelanguage.googleapis.com/v1beta', auth_method: 'api_key',
     capabilities: ['text_generation', 'vision', 'multimodal', 'code_generation'], specialization: 'general',
     rate_limit: 15000, timeout: 30000, max_retries: 3, temperature: 0.4, max_tokens: 1000000, priority: 4,
     environment: 'production', icon: Globe, color: 'text-blue-600', gradient: 'from-blue-500 to-purple-600',
@@ -155,8 +155,8 @@ export const EnhancedProviderWizard: React.FC<EnhancedProviderWizardProps> = ({
         api_endpoint: provider.api_endpoint,
         configuration: {
           auth_method: provider.auth_method,
-          selected_model: 'grok-2-latest', // Use a fallback model for testing
-          selected_models: ['grok-2-latest']
+          selected_model: getDefaultModelForProvider(provider.provider_type),
+          selected_models: [getDefaultModelForProvider(provider.provider_type)]
         }
       };
       
@@ -185,15 +185,34 @@ export const EnhancedProviderWizard: React.FC<EnhancedProviderWizardProps> = ({
       }
     } catch (error: any) {
       setConnectionLatency(null);
-      if (window.location.hostname === 'localhost') {
-        setConnectionTested(true);
-        toast({ title: '🛠️ Development Mode', description: 'Connection test bypassed for local development', duration: 4000 });
-        return true;
-      }
-      toast({ title: '❌ Connection Failed', description: `Unable to reach API endpoint: ${error.message}`, variant: 'destructive' });
+      toast({ 
+        title: '❌ Connection Failed', 
+        description: `Unable to reach API endpoint: ${error.message}`, 
+        variant: 'destructive' 
+      });
       return false;
     } finally {
       setIsTesting(false);
+    }
+  };
+
+  // Helper function to get default model for testing based on provider type
+  const getDefaultModelForProvider = (providerType: string): string => {
+    switch (providerType) {
+      case 'grok':
+      case 'xai':
+        return 'grok-2-latest';
+      case 'google':
+      case 'gemini':
+        return 'gemini-1.5-flash';
+      case 'openai':
+        return 'gpt-3.5-turbo';
+      case 'anthropic':
+        return 'claude-3-5-sonnet-20241022';
+      case 'deepseek':
+        return 'deepseek-chat';
+      default:
+        return 'default-model';
     }
   };
 

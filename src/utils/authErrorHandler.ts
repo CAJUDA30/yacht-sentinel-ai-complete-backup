@@ -135,13 +135,8 @@ export class AuthErrorHandler {
       }
     });
     
-    // Monitor auth state changes
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' && !session) {
-        console.log('[AuthErrorHandler] User signed out, clearing any remaining tokens');
-        await clearInvalidAuthTokens();
-      }
-    });
+    // REMOVED: Duplicate auth state listener - Master Auth System handles this now
+    console.log('[AuthErrorHandler] ✅ Error handling initialized (auth state managed by Master Auth System)');
   }
 }
 

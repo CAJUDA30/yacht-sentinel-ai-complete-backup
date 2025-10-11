@@ -158,30 +158,18 @@ export const AppSettingsProvider: React.FC<AppSettingsProviderProps> = ({ childr
     loadSettings();
   }, []);
 
-  // Listen for auth changes and sync user role
+  // Listen for auth changes and sync user role - REMOVED CONFLICTING LISTENER
+  // This now uses Master Auth System through useSupabaseAuth hook
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          await syncUserRole(session.user.id);
-        } else if (event === 'SIGNED_OUT') {
-          // Reset user settings to defaults when signing out
-          setSettings(prevSettings => ({
-            ...prevSettings,
-            user: {
-              ...defaultSettings.user,
-              email: '',
-              username: '',
-              displayName: ''
-            }
-          }));
-        }
+    // Get current user if available
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await syncUserRole(user.id);
       }
-    );
-
-    return () => {
-      subscription.unsubscribe();
     };
+    
+    getCurrentUser();
   }, []);
 
   const syncUserRole = async (userId: string) => {
@@ -320,11 +308,11 @@ export const AppSettingsProvider: React.FC<AppSettingsProviderProps> = ({ childr
         // Merge database settings with defaults
         const loadedSettings = {
           ...defaultSettings,
-          theme: { ...defaultSettings.theme, ...(dbSettings.setting_value as any)?.theme_settings || {} },
-          notifications: { ...defaultSettings.notifications, ...(dbSettings.setting_value as any)?.notification_settings || {} },
-          system: { ...defaultSettings.system, ...(dbSettings.setting_value as any)?.system_settings || {} },
-          user: { ...defaultSettings.user, ...(dbSettings.setting_value as any)?.user_settings || {} },
-          ai: { ...defaultSettings.ai, ...(dbSettings.setting_value as any)?.ai_settings || {} }
+          theme: { ...defaultSettings.theme, ...(dbSettings.value as any)?.theme_settings || {} },
+          notifications: { ...defaultSettings.notifications, ...(dbSettings.value as any)?.notification_settings || {} },
+          system: { ...defaultSettings.system, ...(dbSettings.value as any)?.system_settings || {} },
+          user: { ...defaultSettings.user, ...(dbSettings.value as any)?.user_settings || {} },
+          ai: { ...defaultSettings.ai, ...(dbSettings.value as any)?.ai_settings || {} }
         };
         setSettings(loadedSettings);
       } else {
@@ -372,9 +360,9 @@ export const AppSettingsProvider: React.FC<AppSettingsProviderProps> = ({ childr
 
       if (yachtProfile) {
         const settingsToUpsert = {
-          yacht_id: yachtProfile.id,
-          setting_key: 'app_settings',
-          setting_value: {
+          key: 'app_settings',
+          category: 'system',
+          value: {
             theme_settings: newSettings.theme,
             notification_settings: newSettings.notifications,
             system_settings: newSettings.system,

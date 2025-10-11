@@ -278,9 +278,9 @@ class StartupHealthService {
 
       // Basic validation
       if (!config.api_endpoint) {
-        debugConsole.warn('STARTUP_HEALTH', `⚠️  Provider ${provider.name} missing API endpoint (configure in AI Settings)`, {
+        debugConsole.debug('STARTUP_HEALTH', `Provider ${provider.name} not configured (API endpoint missing)`, {
           config_keys: Object.keys(config),
-          note: 'This is expected in development until AI providers are configured'
+          note: 'Expected in development - configure in AI Settings when ready'
         }, provider.id, provider.name);
         return {
           providerId: provider.id,
@@ -412,68 +412,74 @@ class StartupHealthService {
   private async checkProviderModels(provider: any, models: string[]): Promise<ModelHealthResult[]> {
     const results: ModelHealthResult[] = [];
     
-    // Test up to 3 models to avoid excessive API calls
-    const modelsToTest = models.slice(0, 3);
+    // Only test the primary selected model to avoid excessive API calls
+    const config = provider.config || provider.configuration || {};
+    const primaryModel = config.selected_model || models[0];
     
-    debugConsole.info('STARTUP_HEALTH', `🧠 Testing models for ${provider.name}`, {
+    if (!primaryModel) {
+      debugConsole.warn('STARTUP_HEALTH', `No primary model found for ${provider.name}`, {
+        total_models: models.length,
+        available_models: models.slice(0, 3)
+      }, provider.id, provider.name);
+      return results;
+    }
+    
+    debugConsole.info('STARTUP_HEALTH', `🧠 Testing primary model for ${provider.name}`, {
+      primary_model: primaryModel,
       total_models: models.length,
-      testing_models: modelsToTest
+      note: 'Testing only primary model to avoid excessive API calls'
     }, provider.id, provider.name);
     
-    for (const modelName of modelsToTest) {
-      try {
-        debugConsole.info('STARTUP_HEALTH', `🔍 Testing model: ${modelName}`, {
-          model_index: modelsToTest.indexOf(modelName) + 1,
-          total_models: modelsToTest.length
-        }, provider.id, provider.name);
-        
-        const testProvider = {
-          ...provider,
-          configuration: {
-            ...provider.config,
-            selected_model: modelName,
-            selected_models: [modelName]
-          }
-        };
-
-        const decryptedApiKey = await getProviderApiKey(provider);
-        const result = await testProviderConnection(testProvider, decryptedApiKey);
-
-        results.push({
-          modelName,
-          isHealthy: result.success,
-          error: result.error,
-          latency: result.latency
-        });
-        
-        if (result.success) {
-          debugConsole.success('STARTUP_HEALTH', `✅ Model ${modelName} is healthy`, {
-            latency: result.latency
-          }, provider.id, provider.name);
-        } else {
-          debugConsole.error('STARTUP_HEALTH', `❌ Model ${modelName} failed`, {
-            error: result.error
-          }, provider.id, provider.name);
+    try {
+      debugConsole.info('STARTUP_HEALTH', `🔍 Testing model: ${primaryModel}`, {
+        model_type: 'primary',
+        provider_type: provider.provider_type
+      }, provider.id, provider.name);
+      
+      const testProvider = {
+        ...provider,
+        configuration: {
+          ...provider.config,
+          selected_model: primaryModel,
+          selected_models: [primaryModel]
         }
+      };
 
-      } catch (error: any) {
-        results.push({
-          modelName,
-          isHealthy: false,
-          error: error.message || 'Model test failed'
-        });
-        debugConsole.error('STARTUP_HEALTH', `❌ Model ${modelName} test error`, {
-          error: error.message
+      const decryptedApiKey = await getProviderApiKey(provider);
+      const result = await testProviderConnection(testProvider, decryptedApiKey);
+
+      results.push({
+        modelName: primaryModel,
+        isHealthy: result.success,
+        error: result.error,
+        latency: result.latency
+      });
+      
+      if (result.success) {
+        debugConsole.success('STARTUP_HEALTH', `✅ Primary model ${primaryModel} is healthy`, {
+          latency: result.latency
+        }, provider.id, provider.name);
+      } else {
+        debugConsole.error('STARTUP_HEALTH', `❌ Primary model ${primaryModel} failed`, {
+          error: result.error
         }, provider.id, provider.name);
       }
 
-      // Longer delay between model tests to ensure stability
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error: any) {
+      results.push({
+        modelName: primaryModel,
+        isHealthy: false,
+        error: error.message || 'Model test failed'
+      });
+      debugConsole.error('STARTUP_HEALTH', `❌ Primary model ${primaryModel} test error`, {
+        error: error.message
+      }, provider.id, provider.name);
     }
 
     debugConsole.success('STARTUP_HEALTH', `✅ Model testing completed for ${provider.name}`, {
       healthy_models: results.filter(r => r.isHealthy).length,
-      total_tested: results.length
+      total_tested: results.length,
+      primary_model: primaryModel
     }, provider.id, provider.name);
 
     return results;

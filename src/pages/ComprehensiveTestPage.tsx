@@ -12,6 +12,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { UnifiedAuthStatus } from '@/components/debug/UnifiedAuthStatus';
 import SmartScanUploader from '@/components/smartscan/SmartScanUploader';
 import AppSidebar from '@/components/AppSidebar';
 
@@ -124,7 +125,12 @@ const ComprehensiveTestPage: React.FC = () => {
           </div>
 
           <div className="mt-8">
-            <h3 className="text-lg font-semibold mb-4">Authentication Status</h3>
+            <h3 className="text-lg font-semibold mb-4">Unified Authentication System</h3>
+            <UnifiedAuthStatus />
+          </div>
+
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold mb-4">Legacy Authentication Status</h3>
             <div className="p-4 bg-muted rounded-lg">
               {authLoading ? (
                 <div className="flex items-center gap-2">

@@ -55,7 +55,14 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
       capabilities: provider?.configuration?.capabilities || [],
       specialization: provider?.configuration?.specialization || 'general',
       selected_models: provider?.configuration?.selected_models || [],
-      ...provider?.configuration
+      // Safely copy specific configuration properties to avoid circular references
+      api_key: provider?.configuration?.api_key || '',
+      discovered_models: provider?.configuration?.discovered_models || [],
+      model_limits: provider?.configuration?.model_limits || {},
+      custom_headers: provider?.configuration?.custom_headers || {},
+      timeout: provider?.configuration?.timeout || 30000,
+      max_tokens: provider?.configuration?.max_tokens || 4000,
+      temperature: provider?.configuration?.temperature || 0.7
     }
   });
 
@@ -295,16 +302,18 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
     const autoSaveDelay = 3000; // 3 seconds after changes
     const timeoutId = setTimeout(async () => {
       try {
-        // Check if there are actual changes to save
+        // Check if there are actual changes to save (including API key changes)
         const hasChanges = 
           formData.name !== provider.name ||
           formData.api_endpoint !== provider.api_endpoint ||
-          JSON.stringify(formData.configuration) !== JSON.stringify(provider.configuration || {});
+          JSON.stringify(formData.configuration) !== JSON.stringify(provider.configuration || {}) ||
+          apiKey !== (provider?.configuration?.api_key ? await getProviderApiKey(provider) : '');
         
         if (hasChanges) {
           debugConsole.info('AUTO_SAVE', `Auto-saving configuration for ${provider.name}`, {
             changes_detected: true,
-            delay_ms: autoSaveDelay
+            delay_ms: autoSaveDelay,
+            api_key_changed: apiKey !== (provider?.configuration?.api_key ? await getProviderApiKey(provider) : '')
           }, provider.id, provider.name);
           
           await handleSave();
@@ -328,7 +337,7 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
     }, autoSaveDelay);
     
     return () => clearTimeout(timeoutId);
-  }, [formData, provider, autoSaveEnabled]);
+  }, [formData, provider, autoSaveEnabled, apiKey]); // Added apiKey to dependency array
 
   const handleSave = async () => {
     // Enhanced save with proper API key encryption
@@ -440,6 +449,33 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
     onClose();
   };
 
+  // Auto-test connection when both endpoint and API key are available
+  useEffect(() => {
+    if (!provider?.id || !formData.api_endpoint || !apiKey || isTestingConnection) return;
+    
+    // Only auto-test if we don't have a recent successful connection or if configuration changed significantly
+    const shouldAutoTest = connectionStatus !== 'success' || 
+      connectionResult?.endpoint !== formData.api_endpoint ||
+      connectionResult?.has_api_key !== !!apiKey;
+    
+    if (shouldAutoTest) {
+      // Add a slight delay to avoid rapid-fire testing during typing
+      const autoTestDelay = 2000; // 2 seconds after both endpoint and key are available
+      const timeoutId = setTimeout(async () => {
+        debugConsole.info('AUTO_TEST', 'Starting automatic connection test', {
+          endpoint: formData.api_endpoint,
+          has_api_key: !!apiKey,
+          previous_status: connectionStatus,
+          trigger_reason: connectionStatus !== 'success' ? 'no_previous_success' : 'configuration_changed'
+        }, provider.id, provider.name);
+        
+        await testConnection();
+      }, autoTestDelay);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [formData.api_endpoint, apiKey, provider?.id, connectionStatus, isTestingConnection]);
+
   const testConnection = async () => {
     if (!formData.api_endpoint) {
       debugConsole.error('CONNECTION_TEST', 'API endpoint is required', {}, provider?.id, provider?.name);
@@ -475,7 +511,12 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
         apiKey
       );
 
-      setConnectionResult(result);
+      setConnectionResult({
+        ...result,
+        endpoint: formData.api_endpoint,
+        has_api_key: !!apiKey,
+        tested_at: new Date().toISOString()
+      });
       setConnectionStatus(result.success ? 'success' : 'error');
       
       if (result.success) {
@@ -506,149 +547,270 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
     }
   };
 
-  const detectModels = async () => {
+  // Unified Provider Synchronization Interface
+  interface UnifiedProviderConfiguration {
+    id: string;
+    name: string;
+    provider_type: string;
+    api_endpoint: string;
+    is_active: boolean;
+    configuration: {
+      api_key?: string;
+      auth_method: string;
+      capabilities: string[];
+      specialization: string;
+      selected_models: string[];
+      discovered_models: string[];
+      model_limits?: Record<string, any>;
+      custom_headers?: Record<string, string>;
+      timeout?: number;
+      max_tokens?: number;
+      temperature?: number;
+      last_model_detection?: string;
+      last_updated?: string;
+      wizard_created?: boolean;
+      wizard_data?: {
+        initial_models: string[];
+        setup_date: string;
+        setup_user: string;
+      };
+    };
+    created_at?: string;
+    updated_at?: string;
+  }
+
+  // Unified model discovery and synchronization function
+  const discoverAndSyncModels = async (options: {
+    preserveSelections?: boolean;
+    mergeWithWizardData?: boolean;
+    autoSelectNew?: boolean;
+  } = {}) => {
+    const {
+      preserveSelections = true,
+      mergeWithWizardData = true,
+      autoSelectNew = false
+    } = options;
+
     if (!formData.api_endpoint || !apiKey) {
-      debugConsole.warn('MODEL_DETECTION', 'API endpoint and key required for model detection', {}, provider?.id, provider?.name);
+      debugConsole.warn('UNIFIED_MODEL_SYNC', 'API endpoint and key required for unified model synchronization', {}, provider?.id, provider?.name);
       toast({
         title: 'Missing Configuration',
-        description: 'Please provide API endpoint and API key before detecting models',
+        description: 'Please provide API endpoint and API key before discovering models',
         variant: 'destructive'
       });
       return;
     }
 
-    // Show loading state
+    // Show unified loading state
     toast({
-      title: '🔍 Detecting Models...',
-      description: 'Querying API for available models and loading saved models',
+      title: '🔄 Unified Model Synchronization...',
+      description: 'Synchronizing models across wizard and configuration systems',
       duration: 2000
     });
 
     try {
-      debugConsole.info('MODEL_DETECTION', 'Starting comprehensive model detection', {
+      debugConsole.info('UNIFIED_MODEL_SYNC', 'Starting unified model discovery and synchronization', {
         endpoint: formData.api_endpoint,
         provider_type: formData.provider_type,
         has_api_key: !!apiKey,
-        has_discovered_models: !!(provider?.configuration?.discovered_models?.length),
-        saved_models_count: provider?.configuration?.discovered_models?.length || 0
+        preserve_selections: preserveSelections,
+        merge_wizard_data: mergeWithWizardData,
+        auto_select_new: autoSelectNew,
+        wizard_created: provider?.configuration?.wizard_created,
+        has_wizard_data: !!(provider?.configuration?.wizard_data),
+        existing_selected_count: formData.configuration.selected_models?.length || 0,
+        existing_discovered_count: provider?.configuration?.discovered_models?.length || 0
       }, provider?.id, provider?.name);
 
-      // Step 1: Load previously discovered models from provider configuration
+      // Step 1: Load wizard data if available and requested
+      let wizardModels: string[] = [];
+      if (mergeWithWizardData && provider?.configuration?.wizard_data) {
+        wizardModels = provider.configuration.wizard_data.initial_models || [];
+        debugConsole.info('UNIFIED_MODEL_SYNC', 'Loading wizard initial models', {
+          wizard_models: wizardModels,
+          count: wizardModels.length,
+          setup_date: provider.configuration.wizard_data.setup_date,
+          source: 'wizard_data'
+        }, provider?.id, provider?.name);
+      }
+
+      // Step 2: Load previously discovered models from provider configuration
       let savedModels: string[] = [];
       if (provider?.configuration?.discovered_models?.length > 0) {
         savedModels = provider.configuration.discovered_models.map(m => 
           typeof m === 'string' ? m : (m.id || m.name)
         ).filter(Boolean);
         
-        debugConsole.info('MODEL_DETECTION', 'Loading previously discovered models', {
+        debugConsole.info('UNIFIED_MODEL_SYNC', 'Loading previously discovered models', {
           saved_models: savedModels,
           count: savedModels.length,
           source: 'provider_configuration'
         }, provider?.id, provider?.name);
       }
 
-      // Step 2: Make fresh API call to detect current models
+      // Step 3: Preserve current user selections if requested
+      let currentSelections: string[] = [];
+      if (preserveSelections) {
+        currentSelections = formData.configuration.selected_models || [];
+        debugConsole.info('UNIFIED_MODEL_SYNC', 'Preserving current user selections', {
+          current_selections: currentSelections,
+          count: currentSelections.length,
+          source: 'current_form_state'
+        }, provider?.id, provider?.name);
+      }
+
+      // Step 4: Make fresh API call to detect current models
       const freshModels = await detectAvailableModels(
         {
           ...provider,
           ...formData,
-          id: provider?.id || 'test-provider',
+          id: provider?.id || 'unified-provider',
           api_endpoint: formData.api_endpoint,
           provider_type: formData.provider_type
         },
         apiKey,
-        true // Request detailed model information from language-models endpoint
+        true // Request detailed model information
       );
       
-      debugConsole.info('MODEL_DETECTION', 'Fresh API call completed', {
+      debugConsole.info('UNIFIED_MODEL_SYNC', 'Fresh API model detection completed', {
         fresh_models: freshModels,
         fresh_count: freshModels.length,
-        source: 'api_call'
+        source: 'live_api_call'
       }, provider?.id, provider?.name);
       
-      // Step 3: Combine saved and fresh models (remove duplicates)
-      const allUniqueModels = [...new Set([...savedModels, ...freshModels])];
+      // Step 5: Unified model consolidation with intelligent merging
+      const allUniqueModels = [...new Set([
+        ...wizardModels,
+        ...savedModels,
+        ...freshModels
+      ])];
       
-      debugConsole.success('MODEL_DETECTION', `Combined model detection completed`, {
+      // Step 6: Smart selection management
+      let finalSelections: string[] = [];
+      
+      if (preserveSelections) {
+        // Keep existing selections and optionally add new models
+        finalSelections = [...currentSelections];
+        
+        if (autoSelectNew) {
+          const newModels = allUniqueModels.filter(
+            model => !currentSelections.includes(model)
+          );
+          finalSelections = [...finalSelections, ...newModels];
+          
+          debugConsole.info('UNIFIED_MODEL_SYNC', 'Auto-selected new models', {
+            new_models: newModels,
+            new_count: newModels.length
+          }, provider?.id, provider?.name);
+        }
+      } else {
+        // Replace with all discovered models
+        finalSelections = [...allUniqueModels];
+      }
+      
+      // Remove duplicates from final selections
+      finalSelections = [...new Set(finalSelections)];
+      
+      debugConsole.success('UNIFIED_MODEL_SYNC', 'Unified model synchronization completed', {
+        wizard_models_count: wizardModels.length,
         saved_models_count: savedModels.length,
         fresh_models_count: freshModels.length,
         total_unique_models: allUniqueModels.length,
+        final_selections_count: finalSelections.length,
         combined_models: allUniqueModels,
-        includes_coder_model: allUniqueModels.some(m => m.toLowerCase().includes('code')),
-        includes_reasoning_model: allUniqueModels.some(m => m.toLowerCase().includes('reasoning')),
-        both_expected_models: allUniqueModels.includes('grok-4-fast-reasoning') && allUniqueModels.includes('grok-code-fast-1')
+        final_selections: finalSelections,
+        includes_expected: {
+          coder_model: allUniqueModels.some(m => m.toLowerCase().includes('code')),
+          reasoning_model: allUniqueModels.some(m => m.toLowerCase().includes('reasoning')),
+          grok_fast_reasoning: allUniqueModels.includes('grok-4-fast-reasoning'),
+          grok_code_fast: allUniqueModels.includes('grok-code-fast-1')
+        }
       }, provider?.id, provider?.name);
       
+      // Step 7: Update state with unified data structure
       setDetectedModels(allUniqueModels);
       
-      // Auto-select detected models (add to existing selection, don't replace)
-      setFormData(prev => {
-        const existingModels = prev.configuration.selected_models || [];
-        const newModels = allUniqueModels.filter(model => !existingModels.includes(model));
-        const allModels = [...existingModels, ...newModels];
-        
-        // Also save the discovered models in the configuration for future use
-        return {
-          ...prev,
-          configuration: {
-            ...prev.configuration,
-            selected_models: allModels,
-            discovered_models: allUniqueModels, // Save all discovered models
-            last_model_detection: new Date().toISOString()
-          }
-        };
-      });
+      setFormData(prev => ({
+        ...prev,
+        configuration: {
+          ...prev.configuration,
+          selected_models: finalSelections,
+          discovered_models: allUniqueModels,
+          last_model_detection: new Date().toISOString(),
+          last_updated: new Date().toISOString(),
+          // Preserve wizard data if it exists
+          ...(provider?.configuration?.wizard_data && {
+            wizard_data: provider.configuration.wizard_data
+          })
+        }
+      }));
       
-      // Show detailed success message with both expected models
+      // Step 8: Show comprehensive success message
       const hasCoderModel = allUniqueModels.includes('grok-code-fast-1');
       const hasReasoningModel = allUniqueModels.includes('grok-4-fast-reasoning');
       
       toast({
-        title: '✅ Models Detected Successfully',
-        description: `Found ${allUniqueModels.length} total models (${savedModels.length} saved + ${freshModels.length} fresh):
-${allUniqueModels.join(', ')}
+        title: '✅ Unified Model Synchronization Complete',
+        description: `Synchronized ${allUniqueModels.length} models (${wizardModels.length} wizard + ${savedModels.length} saved + ${freshModels.length} fresh)
 
-🎯 Expected models: ${hasReasoningModel ? '✅' : '❌'} grok-4-fast-reasoning, ${hasCoderModel ? '✅' : '❌'} grok-code-fast-1`,
-        duration: 10000
+Selected: ${finalSelections.length} models
+
+🎯 Expected models: ${hasReasoningModel ? '✅' : '❌'} reasoning, ${hasCoderModel ? '✅' : '❌'} code`,
+        duration: 12000
       });
       
     } catch (error: any) {
-      debugConsole.error('MODEL_DETECTION', 'Model detection failed', {
+      debugConsole.error('UNIFIED_MODEL_SYNC', 'Unified model synchronization failed', {
         error: error.message,
         stack: error.stack,
-        fallback_action: 'Loading saved models only'
+        fallback_action: 'Loading available saved models'
       }, provider?.id, provider?.name);
       
-      // Fallback: Try to load saved models even if API fails
-      if (provider?.configuration?.discovered_models?.length > 0) {
-        const savedModels = provider.configuration.discovered_models.map(m => 
-          typeof m === 'string' ? m : (m.id || m.name)
-        ).filter(Boolean);
-        
-        setDetectedModels(savedModels);
+      // Intelligent fallback: Load the best available data
+      const fallbackModels = [
+        ...(provider?.configuration?.wizard_data?.initial_models || []),
+        ...(provider?.configuration?.discovered_models || []),
+        ...(formData.configuration.selected_models || [])
+      ].map(m => typeof m === 'string' ? m : (m.id || m.name))
+       .filter(Boolean);
+      
+      const uniqueFallbackModels = [...new Set(fallbackModels)];
+      
+      if (uniqueFallbackModels.length > 0) {
+        setDetectedModels(uniqueFallbackModels);
         
         toast({
-          title: '⚠️ API Detection Failed - Using Saved Models',
-          description: `Loaded ${savedModels.length} previously discovered models: ${savedModels.join(', ')}`,
+          title: '⚠️ API Detection Failed - Using Saved Data',
+          description: `Loaded ${uniqueFallbackModels.length} models from saved configuration: ${uniqueFallbackModels.join(', ')}`,
           duration: 8000
         });
         
-        debugConsole.warn('MODEL_DETECTION', 'Fallback to saved models successful', {
-          saved_models: savedModels,
-          count: savedModels.length
+        debugConsole.warn('UNIFIED_MODEL_SYNC', 'Fallback to saved models successful', {
+          fallback_models: uniqueFallbackModels,
+          count: uniqueFallbackModels.length,
+          sources_used: ['wizard_data', 'discovered_models', 'selected_models']
         }, provider?.id, provider?.name);
       } else {
-        // Complete failure - no saved models and API failed
+        // Complete failure - no data available
         setDetectedModels([]);
         
         toast({
-          title: '❌ Model Detection Failed',
-          description: `Unable to detect models: ${error.message}. No saved models available.`,
+          title: '❌ Model Synchronization Failed',
+          description: `Unable to synchronize models: ${error.message}. No saved data available.`,
           variant: 'destructive',
           duration: 8000
         });
       }
     }
+  };
+
+  // Legacy detectModels function for backward compatibility
+  const detectModels = async () => {
+    await discoverAndSyncModels({
+      preserveSelections: false,
+      mergeWithWizardData: true,
+      autoSelectNew: true
+    });
   };
 
   const generateCurl = () => {
@@ -1035,26 +1197,103 @@ ${allUniqueModels.join(', ')}
                     <CardDescription>Detect and configure available AI models</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <div className="flex items-center gap-4">
-                      <Button
-                        onClick={detectModels}
-                        className="bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
-                      >
-                        <Activity className="w-4 h-4 mr-2" />
-                        Detect Models
-                      </Button>
-                      <div className="text-sm text-neutral-600">
-                        {detectedModels.length > 0 ? (
-                          `${detectedModels.length} models detected`
-                        ) : (
-                          'Click to discover available models'
-                        )}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <Button
+                            onClick={detectModels}
+                            className="bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
+                          >
+                            <Activity className="w-4 h-4 mr-2" />
+                            Detect Models (Legacy)
+                          </Button>
+                          <Button
+                            onClick={() => discoverAndSyncModels({ preserveSelections: true, mergeWithWizardData: true, autoSelectNew: false })}
+                            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg"
+                          >
+                            <Activity className="w-4 h-4 mr-2" />
+                            Unified Sync
+                          </Button>
+                        </div>
+                        <div className="text-sm text-neutral-600">
+                          {detectedModels.length > 0 ? (
+                            `${detectedModels.length} models available`
+                          ) : (
+                            'Click to discover available models'
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Sync Options */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => discoverAndSyncModels({ preserveSelections: false, mergeWithWizardData: true, autoSelectNew: true })}
+                          className="h-9 px-3 text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
+                        >
+                          🔄 Full Refresh
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => discoverAndSyncModels({ preserveSelections: true, mergeWithWizardData: true, autoSelectNew: true })}
+                          className="h-9 px-3 text-xs border-green-200 text-green-600 hover:bg-green-50"
+                        >
+                          ➕ Add New Only
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => discoverAndSyncModels({ preserveSelections: true, mergeWithWizardData: false, autoSelectNew: false })}
+                          className="h-9 px-3 text-xs border-orange-200 text-orange-600 hover:bg-orange-50"
+                        >
+                          🎯 API Only
+                        </Button>
                       </div>
                     </div>
 
                     {detectedModels.length > 0 && (
                       <div className="space-y-4">
-                        <Label className="text-sm font-medium text-neutral-700">Detected Models</Label>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium text-neutral-700">Detected Models</Label>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // Select all detected models
+                                setFormData(prev => ({
+                                  ...prev,
+                                  configuration: {
+                                    ...prev.configuration,
+                                    selected_models: [...new Set([...(prev.configuration.selected_models || []), ...detectedModels])]
+                                  }
+                                }));
+                              }}
+                              className="h-8 px-3 text-xs"
+                            >
+                              Select All
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // Unselect all detected models
+                                setFormData(prev => ({
+                                  ...prev,
+                                  configuration: {
+                                    ...prev.configuration,
+                                    selected_models: (prev.configuration.selected_models || []).filter(model => !detectedModels.includes(model))
+                                  }
+                                }));
+                              }}
+                              className="h-8 px-3 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                            >
+                              Unselect All
+                            </Button>
+                          </div>
+                        </div>
                         <div className="grid gap-4">
                           {detectedModels.map((model) => {
                             const capabilities = getModelCapabilities(model, formData.provider_type);
@@ -1127,7 +1366,47 @@ ${allUniqueModels.join(', ')}
 
                     {(availableModels[formData.provider_type as keyof typeof availableModels] || []).length > 0 && (
                       <div className="space-y-4">
-                        <Label className="text-sm font-medium text-neutral-700">Known Models for {formData.provider_type}</Label>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium text-neutral-700">Known Models for {formData.provider_type}</Label>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // Select all known models for this provider
+                                const knownModels = availableModels[formData.provider_type as keyof typeof availableModels] || [];
+                                setFormData(prev => ({
+                                  ...prev,
+                                  configuration: {
+                                    ...prev.configuration,
+                                    selected_models: [...new Set([...(prev.configuration.selected_models || []), ...knownModels])]
+                                  }
+                                }));
+                              }}
+                              className="h-8 px-3 text-xs"
+                            >
+                              Select All
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // Unselect all known models for this provider
+                                const knownModels = availableModels[formData.provider_type as keyof typeof availableModels] || [];
+                                setFormData(prev => ({
+                                  ...prev,
+                                  configuration: {
+                                    ...prev.configuration,
+                                    selected_models: (prev.configuration.selected_models || []).filter(model => !knownModels.includes(model))
+                                  }
+                                }));
+                              }}
+                              className="h-8 px-3 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                            >
+                              Unselect All
+                            </Button>
+                          </div>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {(availableModels[formData.provider_type as keyof typeof availableModels] || []).map((model) => {
                             const isSelected = formData.configuration.selected_models?.includes(model);

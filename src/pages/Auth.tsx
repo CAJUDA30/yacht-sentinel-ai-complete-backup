@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,33 +18,17 @@ const Auth = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  
+  // Use Master Auth System
+  const { signIn, signUp, isAuthenticated, loading: authLoading } = useSupabaseAuth();
 
   useEffect(() => {
-    // Check if user is already logged in
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        console.log('[Auth] User already logged in, redirecting to home');
-        navigate('/', { replace: true });
-      }
-    };
-
-    checkUser();
-
-    // Listen for auth changes with immediate redirect
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[Auth] Auth state changed:', event);
-      if (event === 'SIGNED_IN' && session) {
-        console.log('[Auth] User signed in, immediate redirect to home');
-        // Use replace to prevent back button from returning to auth page
-        setTimeout(() => {
-          navigate('/', { replace: true });
-        }, 100); // Small delay to ensure state is updated
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    // Navigate to home if user becomes authenticated
+    if (isAuthenticated && !authLoading) {
+      console.log('[Auth] User authenticated, redirecting to home');
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, authLoading, navigate]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,12 +38,11 @@ const Auth = () => {
 
     try {
       console.log('[Auth] Attempting login with:', email);
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      
+      // Use Master Auth System instead of direct supabase call
+      const { error } = await signIn(email, password);
 
-      console.log('[Auth] Sign in response:', { data, error });
+      console.log('[Auth] Sign in response:', { error });
 
       if (error) {
         console.error('[Auth] Sign in error:', error);
@@ -71,11 +54,12 @@ const Auth = () => {
           setError(`Authentication error: ${error.message}`);
         }
       } else {
-        console.log('[Auth] Sign in successful');
+        console.log('[Auth] Sign in successful - Master Auth System will handle navigation');
         toast({
           title: "Welcome back!",
           description: "You've been successfully signed in.",
         });
+        // Navigation will be handled by useEffect when isAuthenticated changes
       }
     } catch (error: any) {
       console.error('[Auth] Sign in exception:', error);
@@ -98,15 +82,8 @@ const Auth = () => {
     }
 
     try {
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl
-        }
-      });
+      // Use Master Auth System instead of direct supabase call
+      const { error } = await signUp(email, password);
 
       if (error) {
         if (error.message.includes('User already registered')) {
@@ -137,10 +114,8 @@ const Auth = () => {
     const demoPassword = 'admin123'; // Correct password
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: demoEmail,
-        password: demoPassword,
-      });
+      // Use Master Auth System instead of direct supabase call
+      const { error } = await signIn(demoEmail, demoPassword);
 
       if (error) {
         setError('Please create the superadmin user first or use manual signup.');
@@ -149,6 +124,7 @@ const Auth = () => {
           title: "Welcome back!",
           description: "Successfully signed in as superadmin.",
         });
+        // Navigation will be handled by useEffect when isAuthenticated changes
       }
     } catch (error) {
       setError('Authentication failed.');

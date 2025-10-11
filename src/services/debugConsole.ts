@@ -244,165 +244,42 @@ export const testProviderConnection = async (
       throw new Error('API endpoint is required');
     }
 
+    if (!apiKey) {
+      clearTimeout(timeoutId);
+      throw new Error('API key is required');
+    }
+
     debugConsole.logProviderTest(providerId, providerName, 'VALIDATION', 'Basic validation passed', {
       endpoint: provider.api_endpoint,
+      provider_type: provider.provider_type,
       authMethod: provider.configuration?.auth_method
     });
 
-    // Prepare test request based on provider type
-    let testEndpoint = provider.api_endpoint;
-    let headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'User-Agent': 'YachtSentinel-AI/1.0'
-    };
-
-    // Add authentication headers
-    if (apiKey) {
-      if (provider.provider_type === 'grok' || provider.provider_type === 'xai') {
-        headers['Authorization'] = `Bearer ${apiKey}`;
-      } else {
-        headers['Authorization'] = `Bearer ${apiKey}`;
-      }
-    }
-
-    let testPayload: any = {};
+    // Provider-specific connection testing
+    const connectionResult = await testProviderConnectionByType(provider, apiKey, controller);
     
-    // Provider-specific test payloads
-    if (provider.provider_type === 'grok' || provider.provider_type === 'xai') {
-      testEndpoint = `${provider.api_endpoint}/chat/completions`;
-      
-      // First, try to get available models to use for testing
-      let availableModel = 'grok-beta'; // Safe fallback model that most API keys should have access to
-      
-      try {
-        debugConsole.logProviderTest(providerId, providerName, 'MODEL_DISCOVERY', 'Checking available models for testing', {
-          endpoint: `${provider.api_endpoint}/models`
-        });
-        
-        const modelsResponse = await fetch(`${provider.api_endpoint}/models`, {
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          signal: controller.signal
-        });
-        
-        if (modelsResponse.ok) {
-          const modelsData = await modelsResponse.json();
-          const availableModels = modelsData.data
-            ?.filter((model: any) => model.object === 'model')
-            ?.map((model: any) => model.id) || [];
-          
-          // Use the first available model, or prefer safer models
-          const preferredModels = ['grok-beta', 'grok-2-mini', 'grok-2-latest'];
-          const testModel = preferredModels.find(model => availableModels.includes(model)) || availableModels[0];
-          
-          if (testModel) {
-            availableModel = testModel;
-            debugConsole.logProviderTest(providerId, providerName, 'MODEL_DISCOVERY', `Selected model for testing: ${testModel}`, {
-              available_models: availableModels,
-              selected_model: testModel
-            });
-          }
-        } else {
-          debugConsole.logProviderTest(providerId, providerName, 'MODEL_DISCOVERY', 'Failed to fetch models, using fallback', {
-            status: modelsResponse.status,
-            fallback_model: availableModel
-          });
-        }
-      } catch (modelError: any) {
-        debugConsole.logProviderTest(providerId, providerName, 'MODEL_DISCOVERY', 'Model discovery failed, using fallback', {
-          error: modelError.message,
-          fallback_model: availableModel
-        });
-      }
-      
-      testPayload = {
-        messages: [
-          { role: 'system', content: 'You are a test assistant.' },
-          { role: 'user', content: 'Testing. Just say hi and hello world and nothing else.' }
-        ],
-        model: availableModel,
-        stream: false,
-        temperature: 0,
-        max_tokens: 10
-      };
-      
-      debugConsole.logProviderTest(providerId, providerName, 'MODEL_SELECTION', `Using model: ${availableModel}`, {
-        final_model: availableModel,
-        reasoning: 'Selected based on API key permissions'
-      });
-    }
-
-    debugConsole.logProviderTest(providerId, providerName, 'REQUEST_PREP', 'Request prepared', {
-      endpoint: testEndpoint,
-      headers: Object.keys(headers)
-    });
-
-    // Make test request using the same controller
-    const response = await fetch(testEndpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(testPayload),
-      signal: controller.signal
-    });
-
     clearTimeout(timeoutId);
     const latency = Date.now() - startTime;
 
-    debugConsole.logProviderTest(providerId, providerName, 'RESPONSE', `Received response: ${response.status}`, {
-      status: response.status,
-      statusText: response.statusText,
-      latency: `${latency}ms`
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorObj;
-      try {
-        errorObj = JSON.parse(errorText);
-      } catch {
-        errorObj = { message: errorText };
-      }
-      
-      // Enhanced handling for X.AI API permission errors
-      if (response.status === 403 && (provider.provider_type === 'grok' || provider.provider_type === 'xai')) {
-        const modelUsed = testPayload?.model || 'unknown';
-        const apiKeyPrefix = apiKey ? `${apiKey.substring(0, 8)}...` : 'missing';
-        
-        debugConsole.logProviderError(providerId, providerName, {
-          error: 'API_KEY_PERMISSIONS',
-          message: `API key lacks permissions for model '${modelUsed}'`,
-          suggestion: 'Visit https://console.x.ai → API Keys → Edit your key → Enable model permissions',
-          api_key_prefix: apiKeyPrefix,
-          model_attempted: modelUsed,
-          status: response.status,
-          next_steps: [
-            '1. Log into console.x.ai',
-            '2. Navigate to API Keys section', 
-            '3. Edit your API key',
-            '4. Enable permissions for the required models',
-            '5. Retry the connection test'
-          ]
-        }, 'CONNECTION_TEST');
-        
-        throw new Error(`X.AI API Key Permission Error: Your API key cannot access the '${modelUsed}' model. Please visit console.x.ai to update your API key permissions.`);
-      }
-      
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    if (connectionResult.success) {
+      debugConsole.logProviderSuccess(providerId, providerName, 'CONNECTION_TEST', {
+        latency: `${latency}ms`,
+        provider_type: provider.provider_type,
+        response: connectionResult.details
+      });
+    } else {
+      debugConsole.logProviderError(providerId, providerName, {
+        error: connectionResult.error,
+        provider_type: provider.provider_type,
+        latency: `${latency}ms`
+      }, 'CONNECTION_TEST');
     }
 
-    const responseData = await response.json();
-    
-    debugConsole.logProviderSuccess(providerId, providerName, 'CONNECTION_TEST', {
-      latency: `${latency}ms`,
-      response: responseData
-    });
-
     return {
-      success: true,
+      success: connectionResult.success,
       latency,
-      details: responseData
+      error: connectionResult.error,
+      details: connectionResult.details
     };
 
   } catch (error: any) {
@@ -419,6 +296,400 @@ export const testProviderConnection = async (
     };
   }
 };
+
+// Provider-specific connection testing function
+async function testProviderConnectionByType(
+  provider: any,
+  apiKey: string,
+  controller: AbortController
+): Promise<{ success: boolean; error?: string; details?: any }> {
+  const { provider_type, api_endpoint } = provider;
+  const providerId = provider.id;
+  const providerName = provider.name;
+
+  debugConsole.logProviderTest(providerId, providerName, 'TYPE_SPECIFIC_TEST', `Testing ${provider_type} provider`, {
+    provider_type,
+    endpoint: api_endpoint
+  });
+
+  switch (provider_type) {
+    case 'google':
+    case 'gemini':
+      return await testGoogleGeminiConnection(provider, apiKey, controller);
+    
+    case 'grok':
+    case 'xai':
+      return await testGrokConnection(provider, apiKey, controller);
+    
+    case 'openai':
+      return await testOpenAIConnection(provider, apiKey, controller);
+    
+    case 'anthropic':
+      return await testAnthropicConnection(provider, apiKey, controller);
+    
+    case 'azure':
+      return await testAzureConnection(provider, apiKey, controller);
+    
+    default:
+      // Generic test for unknown providers
+      return await testGenericConnection(provider, apiKey, controller);
+  }
+}
+
+// Google Gemini connection test
+async function testGoogleGeminiConnection(
+  provider: any,
+  apiKey: string,
+  controller: AbortController
+): Promise<{ success: boolean; error?: string; details?: any }> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+  const baseUrl = provider.api_endpoint;
+
+  try {
+    debugConsole.logProviderTest(providerId, providerName, 'GOOGLE_TEST', 'Testing Google Gemini connection', {
+      baseUrl,
+      method: 'Query parameter authentication'
+    });
+
+    // Google Gemini uses query parameters for API key, not Authorization header
+    const testUrl = `${baseUrl}/models?key=${apiKey}`;
+    
+    const response = await fetch(testUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      signal: controller.signal
+    });
+
+    debugConsole.logProviderTest(providerId, providerName, 'GOOGLE_RESPONSE', `Google API response: ${response.status}`, {
+      status: response.status,
+      statusText: response.statusText
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      
+      // Parse Google-specific error messages
+      try {
+        const errorObj = JSON.parse(errorText);
+        if (errorObj.error?.message) {
+          errorMessage = errorObj.error.message;
+        }
+      } catch {
+        // Use raw error text if not JSON
+        if (errorText) errorMessage = errorText;
+      }
+      
+      // Provide helpful Google-specific error guidance
+      if (response.status === 403) {
+        errorMessage += '. Check that your API key is valid and has Generative AI API enabled.';
+      } else if (response.status === 404) {
+        errorMessage += '. Verify the API endpoint URL is correct for Google Gemini.';
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const responseData = await response.json();
+    
+    debugConsole.logProviderTest(providerId, providerName, 'GOOGLE_SUCCESS', 'Google Gemini connection successful', {
+      models_found: responseData.models?.length || 0
+    });
+
+    return {
+      success: true,
+      details: responseData
+    };
+  } catch (error: any) {
+    debugConsole.logProviderTest(providerId, providerName, 'GOOGLE_ERROR', 'Google Gemini connection failed', {
+      error: error.message
+    });
+    
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Grok/X.AI connection test (existing logic)
+async function testGrokConnection(
+  provider: any,
+  apiKey: string,
+  controller: AbortController
+): Promise<{ success: boolean; error?: string; details?: any }> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+  const baseUrl = provider.api_endpoint;
+
+  try {
+    debugConsole.logProviderTest(providerId, providerName, 'GROK_TEST', 'Testing Grok connection', {
+      baseUrl,
+      method: 'Bearer token authentication'
+    });
+
+    // First, try to get available models to use for testing
+    let availableModel = 'grok-beta'; // Safe fallback model
+    
+    try {
+      const modelsResponse = await fetch(`${baseUrl}/models`, {
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        signal: controller.signal
+      });
+      
+      if (modelsResponse.ok) {
+        const modelsData = await modelsResponse.json();
+        const availableModels = modelsData.data
+          ?.filter((model: any) => model.object === 'model')
+          ?.map((model: any) => model.id) || [];
+        
+        const preferredModels = ['grok-beta', 'grok-2-mini', 'grok-2-latest'];
+        const testModel = preferredModels.find(model => availableModels.includes(model)) || availableModels[0];
+        
+        if (testModel) {
+          availableModel = testModel;
+        }
+      }
+    } catch (modelError) {
+      // Use fallback model if discovery fails
+    }
+    
+    // Test with a simple chat completion
+    const testEndpoint = `${baseUrl}/chat/completions`;
+    const testPayload = {
+      messages: [
+        { role: 'system', content: 'You are a test assistant.' },
+        { role: 'user', content: 'Testing. Just say hi and hello world and nothing else.' }
+      ],
+      model: availableModel,
+      stream: false,
+      temperature: 0,
+      max_tokens: 10
+    };
+
+    const response = await fetch(testEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      body: JSON.stringify(testPayload),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      
+      // Enhanced handling for X.AI API permission errors
+      if (response.status === 403) {
+        throw new Error(`X.AI API Key Permission Error: Your API key cannot access the '${availableModel}' model. Please visit console.x.ai to update your API key permissions.`);
+      }
+      
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    const responseData = await response.json();
+    
+    return {
+      success: true,
+      details: responseData
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// OpenAI connection test
+async function testOpenAIConnection(
+  provider: any,
+  apiKey: string,
+  controller: AbortController
+): Promise<{ success: boolean; error?: string; details?: any }> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+  const baseUrl = provider.api_endpoint;
+
+  try {
+    debugConsole.logProviderTest(providerId, providerName, 'OPENAI_TEST', 'Testing OpenAI connection');
+
+    // Test models endpoint first
+    const modelsResponse = await fetch(`${baseUrl}/models`, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      signal: controller.signal
+    });
+
+    if (!modelsResponse.ok) {
+      const errorText = await modelsResponse.text();
+      throw new Error(`HTTP ${modelsResponse.status}: ${errorText}`);
+    }
+
+    const responseData = await modelsResponse.json();
+    
+    return {
+      success: true,
+      details: responseData
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Anthropic connection test
+async function testAnthropicConnection(
+  provider: any,
+  apiKey: string,
+  controller: AbortController
+): Promise<{ success: boolean; error?: string; details?: any }> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+  const baseUrl = provider.api_endpoint;
+
+  try {
+    debugConsole.logProviderTest(providerId, providerName, 'ANTHROPIC_TEST', 'Testing Anthropic connection');
+
+    // Anthropic uses x-api-key header
+    const testEndpoint = `${baseUrl}/messages`;
+    const testPayload = {
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 10,
+      messages: [{
+        role: 'user',
+        content: 'Test'
+      }]
+    };
+
+    const response = await fetch(testEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      body: JSON.stringify(testPayload),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    const responseData = await response.json();
+    
+    return {
+      success: true,
+      details: responseData
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Azure OpenAI connection test
+async function testAzureConnection(
+  provider: any,
+  apiKey: string,
+  controller: AbortController
+): Promise<{ success: boolean; error?: string; details?: any }> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+  const baseUrl = provider.api_endpoint;
+
+  try {
+    debugConsole.logProviderTest(providerId, providerName, 'AZURE_TEST', 'Testing Azure OpenAI connection');
+
+    // Azure uses api-key header
+    const response = await fetch(`${baseUrl}/models?api-version=2023-05-15`, {
+      headers: {
+        'Accept': 'application/json',
+        'api-key': apiKey,
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    const responseData = await response.json();
+    
+    return {
+      success: true,
+      details: responseData
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Generic connection test for unknown providers
+async function testGenericConnection(
+  provider: any,
+  apiKey: string,
+  controller: AbortController
+): Promise<{ success: boolean; error?: string; details?: any }> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+  const baseUrl = provider.api_endpoint;
+
+  try {
+    debugConsole.logProviderTest(providerId, providerName, 'GENERIC_TEST', 'Testing generic provider connection');
+
+    // Try standard Bearer token authentication
+    const response = await fetch(`${baseUrl}/models`, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    const responseData = await response.json();
+    
+    return {
+      success: true,
+      details: responseData
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
 
 // Helper function to generate X.AI API key permission guidance
 export const getXAIPermissionGuidance = (modelName?: string) => {
@@ -483,7 +754,7 @@ export const generateCurlCommand = (
 };
 
 // Detect available models from API response
-// Enhanced with X.AI Enterprise API full specification support
+// Systematic provider-specific model detection
 export const detectAvailableModels = async (
   provider: any,
   apiKey?: string,
@@ -491,39 +762,166 @@ export const detectAvailableModels = async (
 ): Promise<string[]> => {
   const providerId = provider.id;
   const providerName = provider.name;
+  const { provider_type } = provider;
 
-  debugConsole.info('MODEL_DETECTION', 'Starting enhanced model detection with X.AI Enterprise API', {
-    provider_type: provider.provider_type,
+  debugConsole.info('MODEL_DETECTION', 'Starting systematic model detection', {
+    provider_type,
     endpoint: provider.api_endpoint,
     has_api_key: !!apiKey,
-    api_spec: 'X.AI Enterprise REST API',
     detailed_mode: detailed
   }, providerId, providerName);
 
+  // Use provider-specific model detection
+  switch (provider_type) {
+    case 'google':
+    case 'gemini':
+      return await detectGoogleGeminiModels(provider, apiKey, detailed);
+    
+    case 'grok':
+    case 'xai':
+      return await detectXAIModels(provider, apiKey, detailed);
+    
+    case 'openai':
+      return await detectOpenAIModels(provider, apiKey);
+    
+    case 'anthropic':
+      return await detectAnthropicModels(provider, apiKey);
+    
+    case 'azure':
+      return await detectAzureModels(provider, apiKey);
+    
+    default:
+      return await detectGenericModels(provider, apiKey);
+  }
+};
+
+// Google Gemini model detection with query parameter authentication
+async function detectGoogleGeminiModels(
+  provider: any,
+  apiKey?: string,
+  detailed: boolean = true
+): Promise<string[]> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+
+  if (!apiKey) {
+    throw new Error('Google Gemini API key is required for model discovery');
+  }
+
+  try {
+    // Use the user-configured API endpoint (e.g., https://generativelanguage.googleapis.com/v1beta)
+    // Google Gemini uses query parameters for authentication
+    const modelsEndpoint = `${provider.api_endpoint}/models?key=${apiKey}`;
+    
+    debugConsole.info('MODEL_DETECTION', 'Calling Google Gemini models endpoint', {
+      endpoint: modelsEndpoint.replace(apiKey, 'API_KEY_HIDDEN'),
+      configured_endpoint: provider.api_endpoint,
+      method: 'GET',
+      auth_method: 'query_parameter'
+    }, providerId, providerName);
+
+    const response = await fetch(modelsEndpoint, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      method: 'GET',
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorDetails;
+      try {
+        errorDetails = JSON.parse(errorText);
+      } catch {
+        errorDetails = { message: errorText };
+      }
+      
+      debugConsole.error('MODEL_DETECTION', `Google Gemini API call failed (${response.status})`, {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorDetails,
+        suggestion: response.status === 401 
+          ? 'Check API key validity and ensure Generative AI API is enabled' 
+          : response.status === 403
+            ? 'Verify API key has access to Generative AI models'
+            : 'Check endpoint accessibility and network connectivity'
+      }, providerId, providerName);
+      
+      throw new Error(`Google Gemini API Error (${response.status}): ${errorDetails.error?.message || errorDetails.message || errorText}`);
+    }
+
+    const data = await response.json();
+    let models: string[] = [];
+    
+    // Parse Google Gemini response format
+    if (data.models && Array.isArray(data.models)) {
+      models = data.models
+        .filter((model: any) => model.name && model.supportedGenerationMethods)
+        .map((model: any) => {
+          // Extract model ID from full name (e.g., "models/gemini-1.5-flash" -> "gemini-1.5-flash")
+          return model.name.replace('models/', '');
+        })
+        .filter(Boolean);
+      
+      debugConsole.success('MODEL_DETECTION', 'Successfully detected Google Gemini models', {
+        total_models: models.length,
+        sample_models: models.slice(0, 5),
+        response_structure: 'Google Gemini format'
+      }, providerId, providerName);
+    } else {
+      debugConsole.warn('MODEL_DETECTION', 'Unexpected response format from Google Gemini API', {
+        response_keys: Object.keys(data),
+        has_models_array: !!data.models
+      }, providerId, providerName);
+    }
+
+    if (models.length === 0) {
+      throw new Error('Google Gemini API returned no models. Please verify your API key has access to Generative AI models.');
+    }
+
+    return models;
+    
+  } catch (error: any) {
+    debugConsole.error('MODEL_DETECTION', `Google Gemini model detection failed: ${error.message}`, {
+      error: error.message,
+      provider_type: provider.provider_type
+    }, providerId, providerName);
+    
+    throw error;
+  }
+}
+
+// X.AI/Grok model detection with Bearer token authentication
+async function detectXAIModels(
+  provider: any,
+  apiKey?: string,
+  detailed: boolean = true
+): Promise<string[]> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+
+  if (!apiKey) {
+    throw new Error('X.AI API key is required for model discovery');
+  }
+
   try {
     // Use enhanced language-models endpoint for detailed info when available
-    let modelsEndpoint = detailed && (provider.provider_type === 'grok' || provider.provider_type === 'xai') 
+    let modelsEndpoint = detailed 
       ? `${provider.api_endpoint}/language-models`  // Full model info with pricing, modalities
       : `${provider.api_endpoint}/models`;          // Basic model info
       
     const headers: Record<string, string> = {
       'Accept': 'application/json',
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
     };
-
-    // X.AI requires Authorization header with Bearer token
-    if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    } else {
-      debugConsole.warn('MODEL_DETECTION', 'No API key provided - request will likely fail', {
-        note: 'X.AI Enterprise API requires authentication for all endpoints'
-      }, providerId, providerName);
-    }
 
     debugConsole.info('MODEL_DETECTION', `Calling X.AI ${detailed ? 'language-models' : 'models'} endpoint`, {
       endpoint: modelsEndpoint,
-      headers: Object.keys(headers),
       method: 'GET',
+      auth_method: 'bearer_token',
       enhanced_features: detailed
     }, providerId, providerName);
 
@@ -542,7 +940,7 @@ export const detectAvailableModels = async (
         errorDetails = { message: errorText };
       }
       
-      debugConsole.error('MODEL_DETECTION', `X.AI API call failed (${response.status}) - No fallback models available`, {
+      debugConsole.error('MODEL_DETECTION', `X.AI API call failed (${response.status})`, {
         status: response.status,
         statusText: response.statusText,
         error: errorDetails,
@@ -550,11 +948,10 @@ export const detectAvailableModels = async (
           ? 'Check API key validity at https://console.x.ai' 
           : response.status === 403
             ? 'Verify API key has model access permissions'
-            : 'Check endpoint accessibility and network connectivity',
-        note: 'System configured to show only real API data - no fallback models'
+            : 'Check endpoint accessibility and network connectivity'
       }, providerId, providerName);
       
-      throw new Error(`X.AI API Error (${response.status}): ${errorDetails.message || errorText}. Please check your API key and connection.`);
+      throw new Error(`X.AI API Error (${response.status}): ${errorDetails.message || errorText}`);
     }
 
     const data = await response.json();
@@ -600,37 +997,199 @@ export const detectAvailableModels = async (
       }, providerId, providerName);
     }
 
-    debugConsole.success('MODEL_DETECTION', `Successfully detected ${models.length} models from X.AI Enterprise API`, {
-      models: models.slice(0, 10),
-      total_count: models.length,
-      provider_type: provider.provider_type,
-      api_response_valid: models.length > 0,
-      enhanced_details: detailed && modelDetails.length > 0
-    }, providerId, providerName);
-
     if (models.length === 0) {
-      debugConsole.error('MODEL_DETECTION', 'X.AI API returned no models - No fallback models available', {
-        response_type: 'valid but empty',
-        note: 'System configured to show only real API data - no fallback models'
-      }, providerId, providerName);
-      
       throw new Error('X.AI API returned no models. Please verify your API key has access to models.');
     }
 
     return models;
     
   } catch (error: any) {
-    debugConsole.error('MODEL_DETECTION', `X.AI Enterprise API model detection failed: ${error.message}`, {
+    debugConsole.error('MODEL_DETECTION', `X.AI model detection failed: ${error.message}`, {
       error: error.message,
-      provider_type: provider.provider_type,
-      suggestion: 'Check network connectivity, API key permissions, and endpoint accessibility',
-      note: 'No fallback models will be provided - real API data only'
+      provider_type: provider.provider_type
     }, providerId, providerName);
     
-    // Re-throw the error instead of returning empty array to ensure UI shows proper error message
-    throw new Error(`Model detection failed: ${error.message}. Please check your API connection and try again.`);
+    throw error;
   }
-};
+}
+
+// OpenAI model detection
+async function detectOpenAIModels(
+  provider: any,
+  apiKey?: string
+): Promise<string[]> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+
+  if (!apiKey) {
+    throw new Error('OpenAI API key is required for model discovery');
+  }
+
+  try {
+    const modelsEndpoint = `${provider.api_endpoint}/models`;
+    
+    const response = await fetch(modelsEndpoint, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      method: 'GET',
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI API Error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    const models = data.data
+      ?.filter((model: any) => model.object === 'model')
+      ?.map((model: any) => model.id)
+      ?.filter(Boolean) || [];
+
+    debugConsole.success('MODEL_DETECTION', `Detected ${models.length} OpenAI models`, {
+      total_models: models.length,
+      sample_models: models.slice(0, 5)
+    }, providerId, providerName);
+
+    return models;
+    
+  } catch (error: any) {
+    debugConsole.error('MODEL_DETECTION', `OpenAI model detection failed: ${error.message}`, {
+      error: error.message
+    }, providerId, providerName);
+    
+    throw error;
+  }
+}
+
+// Anthropic model detection
+async function detectAnthropicModels(
+  provider: any,
+  apiKey?: string
+): Promise<string[]> {
+  // Anthropic doesn't have a public models endpoint, return known models
+  const knownModels = [
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
+    'claude-3-opus-20240229',
+    'claude-3-sonnet-20240229',
+    'claude-3-haiku-20240307'
+  ];
+
+  debugConsole.success('MODEL_DETECTION', `Using known Anthropic models`, {
+    total_models: knownModels.length,
+    models: knownModels
+  }, provider.id, provider.name);
+
+  return knownModels;
+}
+
+// Azure OpenAI model detection
+async function detectAzureModels(
+  provider: any,
+  apiKey?: string
+): Promise<string[]> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+
+  if (!apiKey) {
+    throw new Error('Azure OpenAI API key is required for model discovery');
+  }
+
+  try {
+    const modelsEndpoint = `${provider.api_endpoint}/models?api-version=2023-05-15`;
+    
+    const response = await fetch(modelsEndpoint, {
+      headers: {
+        'Accept': 'application/json',
+        'api-key': apiKey,
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      method: 'GET',
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Azure OpenAI API Error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    const models = data.data
+      ?.filter((model: any) => model.object === 'model')
+      ?.map((model: any) => model.id)
+      ?.filter(Boolean) || [];
+
+    debugConsole.success('MODEL_DETECTION', `Detected ${models.length} Azure OpenAI models`, {
+      total_models: models.length,
+      sample_models: models.slice(0, 5)
+    }, providerId, providerName);
+
+    return models;
+    
+  } catch (error: any) {
+    debugConsole.error('MODEL_DETECTION', `Azure OpenAI model detection failed: ${error.message}`, {
+      error: error.message
+    }, providerId, providerName);
+    
+    throw error;
+  }
+}
+
+// Generic model detection for custom providers
+async function detectGenericModels(
+  provider: any,
+  apiKey?: string
+): Promise<string[]> {
+  const providerId = provider.id;
+  const providerName = provider.name;
+
+  if (!apiKey) {
+    throw new Error('API key is required for model discovery');
+  }
+
+  try {
+    const modelsEndpoint = `${provider.api_endpoint}/models`;
+    
+    const response = await fetch(modelsEndpoint, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      },
+      method: 'GET',
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API Error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    const models = data.data
+      ?.filter((model: any) => model.object === 'model')
+      ?.map((model: any) => model.id)
+      ?.filter(Boolean) || [];
+
+    debugConsole.success('MODEL_DETECTION', `Detected ${models.length} models from generic provider`, {
+      total_models: models.length,
+      sample_models: models.slice(0, 5)
+    }, providerId, providerName);
+
+    return models;
+    
+  } catch (error: any) {
+    debugConsole.error('MODEL_DETECTION', `Generic model detection failed: ${error.message}`, {
+      error: error.message
+    }, providerId, providerName);
+    
+    throw error;
+  }
+}
 
 // Get detailed model information from X.AI Enterprise API
 export const getModelDetails = async (

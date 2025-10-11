@@ -3,7 +3,7 @@ import { useAIModels } from '@/hooks/useAIModels';
 import { 
   Brain, Building2, Plus, Settings, RefreshCw, Search, Filter, MoreHorizontal,
   CheckCircle2, AlertTriangle, XCircle, Activity, Zap, Shield, Cpu, TrendingUp,
-  Target, DollarSign, Clock, ChevronRight, Workflow, Terminal
+  Target, DollarSign, Clock, ChevronRight, Workflow, Terminal, Copy, AlertCircle
 } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,7 +58,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [quickEditModalOpen, setQuickEditModalOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<any>(null);
-  const [providerHealthStatus, setProviderHealthStatus] = useState<Record<string, 'checking' | 'healthy' | 'unhealthy' | 'unknown'>>({});
+  const [providerHealthStatus, setProviderHealthStatus] = useState<Record<string, 'checking' | 'healthy' | 'unhealthy' | 'unknown' | 'needs_configuration'>>({});
   const [modelHealthStatus, setModelHealthStatus] = useState<Record<string, {
     status: 'checking' | 'healthy' | 'unhealthy' | 'unknown' | 'not_ready';
     lastChecked?: string;
@@ -68,6 +68,12 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [selectedProviderForDebug, setSelectedProviderForDebug] = useState<any>(null);
   const [isRunningSystemHealthCheck, setIsRunningSystemHealthCheck] = useState(false);
+  const [providerDebugLogs, setProviderDebugLogs] = useState<Record<string, Array<{
+    timestamp: string;
+    level: 'info' | 'error' | 'warning' | 'success';
+    message: string;
+    details?: any;
+  }>>>({});
 
   const {
     providers,
@@ -170,7 +176,12 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
     const config = provider.config as any;
     const modelKey = `${provider.id}-${modelName}`;
     
-    if (!config?.api_endpoint) {
+    // Enhanced endpoint detection with fallback priority
+    const apiEndpoint = provider.api_endpoint || 
+                       provider.config?.api_endpoint || 
+                       provider.configuration?.api_endpoint;
+    
+    if (!apiEndpoint) {
       setModelHealthStatus(prev => ({
         ...prev,
         [modelKey]: {
@@ -179,6 +190,21 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           lastChecked: new Date().toISOString()
         }
       }));
+      
+      addDebugLog(provider.id, 'warning', `Model ${modelName}: Configuration incomplete`, {
+        model: modelName,
+        issue: 'Missing API endpoint'
+      });
+      
+      debugConsole.warn('MODEL_TEST', `Model ${modelName}: Configuration incomplete`, {
+        model: modelName,
+        issue: 'Missing API endpoint',
+        checked_locations: {
+          'config.api_endpoint': !!config?.api_endpoint,
+          'provider.api_endpoint': !!provider.api_endpoint,
+          'configuration.api_endpoint': !!provider.configuration?.api_endpoint
+        }
+      }, provider.id, provider.name);
       
       if (!silent) {
         toast({
@@ -195,6 +221,11 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
       ...prev,
       [modelKey]: { status: 'checking', lastChecked: new Date().toISOString() }
     }));
+    
+    addDebugLog(provider.id, 'info', `Testing model: ${modelName}`, {
+      model: modelName,
+      endpoint: apiEndpoint
+    });
 
     try {
       if (!silent) {
@@ -208,25 +239,31 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
       debugConsole.info('MODEL_TEST', `Starting individual model test for ${modelName}`, {
         provider: provider.name,
         model: modelName,
-        endpoint: config.api_endpoint
+        endpoint: apiEndpoint
       }, provider.id, provider.name);
       
       // Create a test provider object with the specific model
       const testProvider = {
         ...provider,
-        api_endpoint: config.api_endpoint,
+        api_endpoint: apiEndpoint,
         provider_type: provider.provider_type,
         configuration: {
           ...config,
+          api_endpoint: apiEndpoint,
           selected_model: modelName,
           selected_models: [modelName]
         }
       };
       
-      // Get the properly decrypted API key
       const decryptedApiKey = await getProviderApiKey(provider);
       
       if (!decryptedApiKey) {
+        addDebugLog(provider.id, 'error', `Model ${modelName}: API key decryption failed`, {
+          model: modelName,
+          hasProvider: !!provider,
+          hasConfig: !!provider.config,
+          hasConfiguration: !!provider.configuration
+        });
         throw new Error('API key not available or could not be decrypted');
       }
       
@@ -244,9 +281,10 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           }
         }));
         
-        debugConsole.success('MODEL_TEST', `Model test successful for ${modelName}`, {
+        addDebugLog(provider.id, 'success', `Model ${modelName}: Test successful`, {
+          model: modelName,
           latency: result.latency || latency
-        }, provider.id, provider.name);
+        });
         
         if (!silent) {
           toast({
@@ -265,9 +303,11 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           }
         }));
         
-        debugConsole.error('MODEL_TEST', `Model test failed for ${modelName}`, {
-          error: result.error
-        }, provider.id, provider.name);
+        addDebugLog(provider.id, 'error', `Model ${modelName}: Test failed`, {
+          model: modelName,
+          error: result.error,
+          latency
+        });
         
         if (!silent) {
           toast({
@@ -288,9 +328,10 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         }
       }));
       
-      debugConsole.error('MODEL_TEST', `Model test error for ${modelName}`, {
+      addDebugLog(provider.id, 'error', `Model ${modelName}: Test error`, {
+        model: modelName,
         error: error.message
-      }, provider.id, provider.name);
+      });
       
       if (!silent) {
         toast({
@@ -601,65 +642,127 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
   };
 
   // Real health checking for providers
-  const checkProviderHealth = async (provider: any) => {
-    const config = provider.config as any;
-    if (!config?.api_endpoint || !config?.api_key) {
-      setProviderHealthStatus(prev => ({ ...prev, [provider.id]: 'unknown' }));
-      return;
-    }
+  const addDebugLog = (providerId: string, level: 'info' | 'error' | 'warning' | 'success', message: string, details?: any) => {
+    setProviderDebugLogs(prev => ({
+      ...prev,
+      [providerId]: [
+        ...(prev[providerId] || []),
+        {
+          timestamp: new Date().toISOString(),
+          level,
+          message,
+          details
+        }
+      ].slice(-20) // Keep only last 20 logs
+    }));
+  };
 
-    setProviderHealthStatus(prev => ({ ...prev, [provider.id]: 'checking' }));
+  // Enhanced provider health checking function with unified endpoint detection
+  const checkProviderHealth = async (provider: any, silent: boolean = false) => {
+    const providerId = provider.id;
+    setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'checking' }));
     
     try {
-      // Create a test provider object with the expected structure
-      const testProvider = {
-        ...provider,
-        api_endpoint: config.api_endpoint,
+      debugConsole.info('PROVIDER_HEALTH', `Starting enhanced health check for ${provider.name}`, {
         provider_type: provider.provider_type,
-        configuration: {
-          ...config,
-          selected_model: config.selected_model,
-          selected_models: config.selected_models
-        }
-      };
-      
-      debugConsole.info('HEALTH_CHECK', `Starting health check for ${provider.name}`, {
-        provider_type: provider.provider_type,
-        endpoint: config.api_endpoint,
-        has_api_key: !!config.api_key,
-        selected_model: config.selected_model,
-        models_count: config.selected_models?.length || 0
+        has_config: !!provider.config,
+        has_configuration: !!provider.configuration
       }, provider.id, provider.name);
       
-      // Get the properly decrypted API key before testing
+      // Enhanced API key detection with multiple fallback locations
+      const hasApiKey = !!(provider.config?.api_key || 
+                          provider.configuration?.api_key || 
+                          provider.api_key);
+      
+      // Enhanced endpoint detection with fallback priority
+      const apiEndpoint = provider.api_endpoint || 
+                         provider.config?.api_endpoint || 
+                         provider.configuration?.api_endpoint;
+      
+      // Determine provider status based on configuration completeness
+      if (!hasApiKey || !apiEndpoint) {
+        const missingComponents = [];
+        if (!hasApiKey) missingComponents.push('API Key');
+        if (!apiEndpoint) missingComponents.push('API Endpoint');
+        
+        setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'needs_configuration' }));
+        
+        addDebugLog(provider.id, 'warning', `Provider configuration incomplete: Missing ${missingComponents.join(', ')}`, {
+          missing_components: missingComponents,
+          has_api_key: hasApiKey,
+          has_endpoint: !!apiEndpoint
+        });
+        
+        debugConsole.warn('PROVIDER_HEALTH', `Provider ${provider.name} needs configuration`, {
+          missing_components: missingComponents
+        }, provider.id, provider.name);
+        
+        if (!silent) {
+          toast({
+            title: '⚠️ Configuration Incomplete',
+            description: `${provider.name} is missing: ${missingComponents.join(', ')}`,
+            variant: 'destructive',
+            duration: 6000
+          });
+        }
+        return;
+      }
+      
+      // If configuration is complete, test the connection
       const decryptedApiKey = await getProviderApiKey(provider);
       
-      debugConsole.info('HEALTH_CHECK', `Using decrypted API key for ${provider.name}`, {
-        has_decrypted_key: !!decryptedApiKey,
-        api_key_length: decryptedApiKey ? decryptedApiKey.length : 0,
-        api_key_prefix: decryptedApiKey ? decryptedApiKey.substring(0, 4) : 'none'
-      }, provider.id, provider.name);
+      if (!decryptedApiKey) {
+        setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'unhealthy' }));
+        addDebugLog(provider.id, 'error', 'Failed to decrypt API key', {
+          error: 'API key decryption failed'
+        });
+        return;
+      }
       
-      const result = await testProviderConnection(testProvider, decryptedApiKey);
-      setProviderHealthStatus(prev => ({ 
-        ...prev, 
-        [provider.id]: result.success ? 'healthy' : 'unhealthy' 
-      }));
+      const result = await testProviderConnection(provider, decryptedApiKey);
       
       if (result.success) {
-        debugConsole.success('HEALTH_CHECK', `Health check passed for ${provider.name}`, {
+        setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'healthy' }));
+        addDebugLog(provider.id, 'success', `Provider health check passed`, {
           latency: result.latency
-        }, provider.id, provider.name);
+        });
+        
+        if (!silent) {
+          toast({
+            title: '✅ Provider Healthy',
+            description: `${provider.name} is working properly`,
+            duration: 3000
+          });
+        }
       } else {
-        debugConsole.error('HEALTH_CHECK', `Health check failed for ${provider.name}`, {
+        setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'unhealthy' }));
+        addDebugLog(provider.id, 'error', `Provider health check failed`, {
           error: result.error
-        }, provider.id, provider.name);
+        });
+        
+        if (!silent) {
+          toast({
+            title: '❌ Provider Unhealthy',
+            description: result.error || 'Connection test failed',
+            variant: 'destructive',
+            duration: 5000
+          });
+        }
       }
+      
     } catch (error: any) {
-      setProviderHealthStatus(prev => ({ ...prev, [provider.id]: 'unhealthy' }));
-      debugConsole.error('HEALTH_CHECK', `Health check error for ${provider.name}`, {
+      setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'unhealthy' }));
+      addDebugLog(provider.id, 'error', `Health check error: ${error.message}`, {
         error: error.message
-      }, provider.id, provider.name);
+      });
+      
+      if (!silent) {
+        toast({
+          title: '❌ Health Check Error',
+          description: error.message,
+          variant: 'destructive'
+        });
+      }
     }
   };
 
@@ -832,7 +935,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
     }
   }, [providers.data]);
 
-  // Auto-refresh health status every 5 minutes
+  // Auto-refresh health status every 5 minutes (optimized)
   useEffect(() => {
     const interval = setInterval(() => {
       if (providers.data && providers.data.length > 0) {
@@ -840,17 +943,15 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           if (provider.is_active) {
             checkProviderHealth(provider);
             
+            // Only test the primary selected model to avoid excessive API calls
             const config = provider.config as any;
-            const allModels = [...new Set([
-              ...(config?.selected_models || []),
-              ...(config?.discovered_models || [])
-            ])].map(m => typeof m === 'string' ? m : (m?.id || m?.name || String(m))).filter(Boolean);
+            const primaryModel = config?.selected_model;
             
-            allModels.forEach(modelName => {
+            if (primaryModel) {
               setTimeout(() => {
-                testIndividualModel(provider, modelName, true);
-              }, Math.random() * 3000);
-            });
+                testIndividualModel(provider, primaryModel, true);
+              }, Math.random() * 2000); // Stagger randomly up to 2 seconds
+            }
           }
         });
       }
@@ -858,6 +959,29 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
 
     return () => clearInterval(interval);
   }, [providers.data]);
+
+  // IMPORTANT: Check health when switching to providers tab (optimized)
+  useEffect(() => {
+    if (activeTab === 'providers' && providers.data && providers.data.length > 0) {
+      console.log('[Health Check] Providers tab activated - running health checks');
+      providers.data.forEach(provider => {
+        if (provider.is_active) {
+          // Check provider health immediately
+          checkProviderHealth(provider);
+          
+          // Only test the primary selected model to avoid excessive API calls
+          const config = provider.config as any;
+          const primaryModel = config?.selected_model;
+          
+          if (primaryModel) {
+            setTimeout(() => {
+              testIndividualModel(provider, primaryModel, true);
+            }, 1000); // Small delay
+          }
+        }
+      });
+    }
+  }, [activeTab, providers.data]);
 
   return (
     <div className={`min-h-screen bg-gradient-to-br from-neutral-50 via-white to-neutral-100 ${className}`}>
@@ -939,18 +1063,32 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
             onClose={() => setShowAddProvider(false)}
             onProviderCreate={async (providerData: any) => {
               try {
-                // Enhanced provider data handling - save ALL configuration
-                const insertData = {
+                debugConsole.info('PROVIDER_CREATE', 'Starting provider creation', {
                   name: providerData.name,
                   provider_type: providerData.provider_type,
+                  has_api_key: !!(providerData.configuration?.api_key),
+                  models_count: providerData.configuration?.selected_models?.length || 0
+                });
+                
+                // Build the complete provider data with BOTH root-level and config fields
+                const insertData = {
+                  // Root-level fields (database columns)
+                  name: providerData.name,
+                  provider_type: providerData.provider_type,
+                  api_endpoint: providerData.configuration?.api_endpoint || providerData.api_endpoint,
+                  auth_method: providerData.auth_method || providerData.configuration?.auth_method || 'api_key',
                   is_active: providerData.is_active !== false,
+                  capabilities: providerData.capabilities || [],
+                  description: providerData.configuration?.description || '',
+                  
+                  // config JSONB field - store ALL configuration including API key
                   config: {
-                    // Core API settings
+                    // Core API settings - CRITICAL for connections
                     api_endpoint: providerData.configuration?.api_endpoint || providerData.api_endpoint,
-                    api_key: providerData.configuration?.api_key || providerData.api_key,
+                    api_key: providerData.configuration?.api_key || providerData.api_key, // MUST save this!
                     auth_method: providerData.auth_method || providerData.configuration?.auth_method || 'api_key',
                     
-                    // Model configuration
+                    // Model configuration - CRITICAL for displaying and using models
                     selected_models: providerData.configuration?.selected_models || [],
                     selected_model: providerData.configuration?.selected_model,
                     discovered_models: providerData.configuration?.discovered_models || [],
@@ -962,15 +1100,13 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                     temperature: providerData.configuration?.temperature || 0.1,
                     max_tokens: providerData.configuration?.max_tokens || 4000,
                     
-                    // Capabilities and metadata
-                    capabilities: providerData.capabilities || [],
+                    // Metadata
                     specialization: providerData.configuration?.specialization || 'general',
                     priority: providerData.configuration?.priority || 1,
                     environment: providerData.configuration?.environment || 'production',
                     tags: providerData.configuration?.tags || [],
-                    description: providerData.configuration?.description || '',
                     
-                    // Connection validation
+                    // Connection validation metadata
                     connection_tested: providerData.configuration?.connection_tested || false,
                     connection_latency: providerData.configuration?.connection_latency,
                     
@@ -981,26 +1117,30 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                   }
                 };
 
-                console.log('Creating provider with full configuration:', insertData);
+                debugConsole.info('PROVIDER_CREATE', 'Provider data prepared', {
+                  root_fields: Object.keys(insertData).filter(k => k !== 'config'),
+                  config_fields: Object.keys(insertData.config),
+                  has_api_key_in_config: !!insertData.config.api_key,
+                  selected_models_count: insertData.config.selected_models?.length || 0
+                });
                 
-                // Quick fix for local database: use configuration column instead of config
-                const localInsertData = {
-                  ...insertData,
-                  configuration: insertData.config // Map config to configuration for local DB
-                };
-                delete localInsertData.config;
-                
+                // Insert into database - trigger will sync config to configuration
                 const { data, error } = await supabase
                   .from('ai_providers_unified')
-                  .insert([localInsertData])
+                  .insert([insertData])
                   .select();
 
                 if (error) {
+                  debugConsole.error('PROVIDER_CREATE', 'Database insert failed', {
+                    error_code: error.code,
+                    error_message: error.message,
+                    error_details: error.details
+                  });
+                  
                   // Enhanced error handling for missing table
                   if (error.code === '42P01' || error.message?.includes('does not exist')) {
                     console.error('❌ CRITICAL: ai_providers_unified table does not exist!');
                     
-                    // Attempt automatic table creation
                     toast({
                       title: '🔧 Attempting Automatic Setup',
                       description: 'Creating missing AI providers table...',
@@ -1017,28 +1157,29 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                           duration: 8000
                         });
                         
-                        // Refresh providers and try again
                         await refetchProviders();
                         
-                        // Retry the provider creation with configuration column
-                        const retryInsertData = {
-                          ...insertData,
-                          configuration: insertData.config
-                        };
-                        delete retryInsertData.config;
-                        
+                        // Retry with same data structure
                         const { data: retryData, error: retryError } = await supabase
                           .from('ai_providers_unified')
-                          .insert([retryInsertData])
+                          .insert([insertData])
                           .select();
                           
                         if (retryError) {
+                          debugConsole.error('PROVIDER_CREATE', 'Retry insert failed', {
+                            error: retryError.message
+                          });
                           throw retryError;
                         }
                         
+                        debugConsole.success('PROVIDER_CREATE', 'Provider created after table setup', {
+                          provider_id: retryData[0]?.id,
+                          name: retryData[0]?.name
+                        });
+                        
                         await refetchProviders();
                         
-                        // Automatically test the new provider and its models
+                        // Auto-test the newly created provider
                         setTimeout(async () => {
                           const newProviders = await providers.refetch();
                           const latestProvider = newProviders.data?.find(p => p.name === providerData.name);
@@ -1049,23 +1190,23 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                               models_count: (latestProvider.config as any)?.selected_models?.length || 0
                             }, latestProvider.id, latestProvider.name);
                             
-                            // Test provider health
                             await checkProviderHealth(latestProvider);
                             
-                            // Test all models
+                            // Only test the primary selected model to avoid excessive API calls
                             const config = latestProvider.config as any;
-                            const allModels = [...new Set([
-                              ...(config?.selected_models || []),
-                              ...(config?.discovered_models || [])
-                            ])];
+                            const primaryModel = config?.selected_model;
                             
-                            for (const modelName of allModels) {
-                              await testIndividualModel(latestProvider, modelName, true);
-                              // Small delay between tests
-                              await new Promise(resolve => setTimeout(resolve, 1000));
+                            if (primaryModel) {
+                              debugConsole.info('AUTO_TEST', `Testing primary model: ${primaryModel}`, {
+                                provider_name: latestProvider.name,
+                                note: 'Testing only primary model to avoid API rate limits'
+                              }, latestProvider.id, latestProvider.name);
+                              
+                              await testIndividualModel(latestProvider, primaryModel, true);
                             }
                           }
-                        }, 2000); // Give time for the provider to be saved
+                        }, 2000);
+                        
                         toast({
                           title: '🎉 Provider Created Successfully',
                           description: `${providerData.name} has been configured and is ready for use!`,
@@ -1074,6 +1215,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                         return;
                         
                       } else {
+                        debugConsole.error('PROVIDER_CREATE', 'Automatic table setup failed');
                         toast({
                           title: '🚨 Automatic Setup Failed',
                           description: 'Please check URGENT_DATABASE_FIX.md for manual setup instructions.',
@@ -1083,6 +1225,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                         return;
                       }
                     } catch (setupError: any) {
+                      debugConsole.error('PROVIDER_CREATE', 'Setup error', { error: setupError.message });
                       console.error('Automatic setup failed:', setupError);
                       toast({
                         title: '🚨 Database Configuration Required',
@@ -1093,10 +1236,46 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                       return;
                     }
                   }
+                  
+                  // Re-throw other errors
                   throw error;
                 }
                 
+                debugConsole.success('PROVIDER_CREATE', 'Provider created successfully', {
+                  provider_id: data[0]?.id,
+                  name: data[0]?.name,
+                  has_config: !!data[0]?.config,
+                  models_count: (data[0]?.config as any)?.selected_models?.length || 0
+                });
+                
+                // Refresh providers to show the new one
                 await refetchProviders();
+                
+                // Auto-test the newly created provider
+                setTimeout(async () => {
+                  const newProviders = await providers.refetch();
+                  const latestProvider = newProviders.data?.find(p => p.id === data[0]?.id);
+                  
+                  if (latestProvider && latestProvider.is_active) {
+                    debugConsole.info('AUTO_TEST', `Auto-testing newly created provider: ${latestProvider.name}`, {
+                      provider_id: latestProvider.id,
+                      models_count: (latestProvider.config as any)?.selected_models?.length || 0
+                    }, latestProvider.id, latestProvider.name);
+                    
+                    await checkProviderHealth(latestProvider);
+                    
+                    const config = latestProvider.config as any;
+                    const allModels = [...new Set([
+                      ...(config?.selected_models || []),
+                      ...(config?.discovered_models || [])
+                    ])];
+                    
+                    for (const modelName of allModels) {
+                      await testIndividualModel(latestProvider, modelName, true);
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                  }
+                }, 2000);
                 
                 toast({
                   title: '🎉 Provider Created Successfully',
@@ -1104,11 +1283,16 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                   duration: 5000
                 });
               } catch (error: any) {
+                debugConsole.error('PROVIDER_CREATE', 'Provider creation failed', {
+                  error: error.message,
+                  stack: error.stack?.split('\n').slice(0, 5)
+                });
                 console.error('Failed to create provider:', error);
                 toast({
                   title: '❌ Failed to Create Provider',
                   description: error.message || 'An unexpected error occurred',
-                  variant: 'destructive'
+                  variant: 'destructive',
+                  duration: 7000
                 });
                 throw error;
               }
@@ -1191,20 +1375,6 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            {/* Enhanced Apple-Style Overview Header */}
-            <div className="relative overflow-hidden bg-white/95 backdrop-blur-xl border border-neutral-200/40 rounded-2xl shadow-lg">
-              <div className="absolute inset-0 bg-gradient-to-r from-neutral-50/60 via-white/40 to-neutral-100/60"></div>
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-transparent via-white/30 to-transparent"></div>
-              <div className="relative px-8 py-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-3xl font-bold text-neutral-900 tracking-tight mb-2 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-700 bg-clip-text text-transparent">Developer Configuration</h1>
-                    <p className="text-base text-neutral-600 font-medium leading-relaxed">Advanced system configuration and AI management tools for enterprise environments</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Enhanced Apple-Style Metrics Dashboard */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div 
@@ -1443,15 +1613,38 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                           
                           {/* Status and Context Menu */}
                           <div className="flex items-center gap-2 flex-shrink-0">
+                            {/* Real-time connectivity status */}
                             <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
-                              provider.is_active 
-                                ? 'text-green-700 bg-green-50 border-green-200' 
-                                : 'text-muted-foreground bg-muted border-border'
+                              providerHealthStatus[provider.id] === 'checking'
+                                ? 'text-blue-700 bg-blue-50 border-blue-200 animate-pulse'
+                                : providerHealthStatus[provider.id] === 'healthy'
+                                ? 'text-green-700 bg-green-50 border-green-200'
+                                : providerHealthStatus[provider.id] === 'unhealthy'
+                                ? 'text-red-700 bg-red-50 border-red-200'
+                                : providerHealthStatus[provider.id] === 'needs_configuration'
+                                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                : 'text-gray-700 bg-gray-50 border-gray-200'
                             }`}>
                               <div className={`w-1.5 h-1.5 rounded-full ${
-                                provider.is_active ? 'bg-green-500' : 'bg-muted-foreground'
+                                providerHealthStatus[provider.id] === 'checking'
+                                  ? 'bg-blue-500 animate-pulse'
+                                  : providerHealthStatus[provider.id] === 'healthy'
+                                  ? 'bg-green-500'
+                                  : providerHealthStatus[provider.id] === 'unhealthy'
+                                  ? 'bg-red-500'
+                                  : providerHealthStatus[provider.id] === 'needs_configuration'
+                                  ? 'bg-amber-500'
+                                  : 'bg-gray-500'
                               }`} />
-                              {provider.is_active ? 'Active' : 'Inactive'}
+                              {providerHealthStatus[provider.id] === 'checking'
+                                ? 'Checking'
+                                : providerHealthStatus[provider.id] === 'healthy'
+                                ? 'Connected'
+                                : providerHealthStatus[provider.id] === 'unhealthy'
+                                ? 'Failed'
+                                : providerHealthStatus[provider.id] === 'needs_configuration'
+                                ? 'Setup Needed'
+                                : 'Unknown'}
                             </div>
                             
                             <ProviderContextMenu
@@ -1489,6 +1682,11 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                                 <XCircle className="w-4 h-4 text-red-500" />
                                 <span className="text-sm text-muted-foreground">Connection Failed</span>
                               </>
+                            ) : providerHealthStatus[provider.id] === 'needs_configuration' ? (
+                              <>
+                                <Settings className="w-4 h-4 text-amber-500" />
+                                <span className="text-sm text-muted-foreground">Needs Setup</span>
+                              </>
                             ) : (
                               <>
                                 <AlertTriangle className="w-4 h-4 text-muted-foreground" />
@@ -1500,7 +1698,11 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                           <div className="flex items-center gap-2">
                             <Clock className="w-4 h-4 text-muted-foreground" />
                             <span className="text-sm text-muted-foreground">
-                              {config?.api_key ? 'Configured' : 'Not Configured'}
+                              {providerHealthStatus[provider.id] === 'healthy' && 'Configured'}
+                              {providerHealthStatus[provider.id] === 'unhealthy' && 'Connection Error'}
+                              {providerHealthStatus[provider.id] === 'checking' && 'Checking...'}
+                              {providerHealthStatus[provider.id] === 'needs_configuration' && 'Missing API Key'}
+                              {(providerHealthStatus[provider.id] === 'unknown' || !providerHealthStatus[provider.id]) && 'Not Configured'}
                             </span>
                           </div>
                           
@@ -1519,6 +1721,88 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                           )}
                         </div>
                         
+                        {/* Debug Console Section - Only show when connection fails */}
+                        {(providerHealthStatus[provider.id] === 'unhealthy' || hasHealthIssues) && providerDebugLogs[provider.id]?.length > 0 && (
+                          <div className="border-t border-red-200 pt-3 mt-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Terminal className="w-4 h-4 text-red-600" />
+                                <span className="text-xs font-semibold text-red-700">Debug Console</span>
+                                <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                                  {providerDebugLogs[provider.id].filter(log => log.level === 'error').length} errors
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const logs = providerDebugLogs[provider.id];
+                                  const logText = logs.map(log => {
+                                    const details = log.details ? JSON.stringify(log.details, null, 2) : '';
+                                    return `[${new Date(log.timestamp).toLocaleTimeString()}] ${log.level.toUpperCase()}: ${log.message}${details ? '\n' + details : ''}`;
+                                  }).join('\n\n');
+                                  navigator.clipboard.writeText(logText);
+                                  toast({
+                                    title: '✅ Copied to Clipboard',
+                                    description: 'Debug logs copied successfully',
+                                    duration: 2000
+                                  });
+                                }}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <Copy className="w-3 h-3 mr-1" />
+                                Copy
+                              </Button>
+                            </div>
+                            <div className="bg-neutral-950 rounded-lg p-3 max-h-48 overflow-y-auto font-mono text-xs">
+                              {providerDebugLogs[provider.id].slice(-10).reverse().map((log, idx) => (
+                                <div key={idx} className="mb-2 last:mb-0">
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-neutral-500 flex-shrink-0">
+                                      {new Date(log.timestamp).toLocaleTimeString()}
+                                    </span>
+                                    <span className={`font-semibold flex-shrink-0 ${
+                                      log.level === 'error' ? 'text-red-400' :
+                                      log.level === 'warning' ? 'text-yellow-400' :
+                                      log.level === 'success' ? 'text-green-400' :
+                                      'text-blue-400'
+                                    }`}>
+                                      {log.level.toUpperCase()}
+                                    </span>
+                                    <span className="text-neutral-300 flex-1">
+                                      {log.message}
+                                    </span>
+                                  </div>
+                                  {log.details && (
+                                    <div className="mt-1 ml-24 text-neutral-400 text-xs">
+                                      {Object.entries(log.details).map(([key, value]) => (
+                                        <div key={key} className="flex gap-2">
+                                          <span className="text-neutral-500">{key}:</span>
+                                          <span className="text-neutral-300 break-all">
+                                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-2 flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded-md">
+                              <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                              <div className="text-xs text-amber-800">
+                                <p className="font-semibold mb-1">Troubleshooting Tips:</p>
+                                <ul className="list-disc list-inside space-y-0.5 text-amber-700">
+                                  <li>Verify API endpoint is correct</li>
+                                  <li>Check API key has required permissions</li>
+                                  <li>Ensure selected models are available</li>
+                                  <li>Review error details above</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
                         {/* Action Buttons */}
                         <div className="flex flex-col gap-2 pt-2">
                           <div className="flex items-center gap-2">
@@ -1526,10 +1810,14 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                               variant="outline" 
                               size="sm"
                               onClick={() => handleConfigureProvider(provider)}
-                              className="flex-1 h-9"
+                              className={`flex-1 h-9 ${
+                                providerHealthStatus[provider.id] === 'needs_configuration'
+                                  ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                  : ''
+                              }`}
                             >
                               <Settings className="w-4 h-4 mr-2" />
-                              Configure
+                              {providerHealthStatus[provider.id] === 'needs_configuration' ? 'Setup Required' : 'Configure'}
                             </Button>
                             
                             {hasHealthIssues && (
@@ -1637,18 +1925,15 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                   .map((provider) => {
                     const config = provider.config as any;
                     const selectedModels = config.selected_models || [];
-                    const discoveredModels = config.discovered_models || [];
                     
-                    // Normalize all models to strings - handle both string and object formats
+                    // Only show pre-selected models from configuration wizard
+                    // Normalize selected models to strings - handle both string and object formats
                     const normalizeModel = (model: any): string => {
                       if (typeof model === 'string') return model;
                       return model?.id || model?.name || String(model);
                     };
                     
-                    const allModels = [...new Set([
-                      ...selectedModels.map(normalizeModel),
-                      ...discoveredModels.map(normalizeModel)
-                    ])].filter(Boolean); // Remove any empty values
+                    const displayModels = selectedModels.map(normalizeModel).filter(Boolean);
                     
                     return (
                       <div key={provider.id} className="relative overflow-hidden bg-white/80 backdrop-blur-sm border border-neutral-200/60 rounded-2xl">
@@ -1663,7 +1948,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                                 </div>
                                 <div>
                                   <h3 className="text-xl font-semibold text-neutral-900">{provider.name}</h3>
-                                  <p className="text-sm text-neutral-600 capitalize">{provider.provider_type} Provider • {allModels.length} models available</p>
+                                  <p className="text-sm text-neutral-600 capitalize">{provider.provider_type} Provider • {displayModels.length} models available</p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -1700,7 +1985,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                           {/* Models Grid */}
                           <div className="p-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {allModels.map((modelName, index) => {
+                              {displayModels.map((modelName, index) => {
                                 // Ensure modelName is a string
                                 const normalizedModelName = typeof modelName === 'string' ? modelName : String(modelName);
                                 const isSelected = selectedModels.map(m => typeof m === 'string' ? m : (m?.id || m?.name || String(m))).includes(normalizedModelName);

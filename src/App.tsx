@@ -10,7 +10,6 @@ import { UnifiedYachtSentinelProvider } from "@/contexts/UnifiedYachtSentinelCon
 import { YachtProvider } from "@/contexts/YachtContext";
 import { UserRoleProvider } from "@/contexts/UserRoleContext";
 import { AppSettingsProvider } from "@/contexts/AppSettingsContext";
-import { SuperAdminProvider } from "@/contexts/SuperAdminContext";
 
 // Initialize authentication error handling
 import '@/utils/authErrorHandler';
@@ -90,60 +89,12 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// Bulletproof Authentication Guard
-const RouterAuthGuard = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, loading } = useSupabaseAuth();
-  const location = useLocation();
-  
-  // Add visibility refresh handler
-  useVisibilityRefresh();
-
-  // Debug current state
-  React.useEffect(() => {
-    console.log('[RouterAuthGuard] State:', {
-      loading,
-      isAuthenticated,
-      pathname: location.pathname,
-      timestamp: new Date().toISOString()
-    });
-  }, [loading, isAuthenticated, location.pathname]);
-
-  // Show loading during initialization
-  if (loading) {
-    console.log('[RouterAuthGuard] Showing loading screen');
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Initializing...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Authentication logic
-  const isOnAuthPage = location.pathname === '/auth';
-  
-  // Not authenticated - redirect to login (unless already there)
-  if (!isAuthenticated && !isOnAuthPage) {
-    console.log('[RouterAuthGuard] Not authenticated - redirecting to /auth');
-    return <Navigate to="/auth" replace />;
-  }
-  
-  // Authenticated but on auth page - redirect to home
-  if (isAuthenticated && isOnAuthPage) {
-    console.log('[RouterAuthGuard] Already authenticated - redirecting to home');
-    return <Navigate to="/" replace />;
-  }
-  
-  // Allow access
-  console.log('[RouterAuthGuard] Access granted to:', location.pathname);
-  return <>{children}</>;
-};
-
 // Component to handle automated enterprise health monitoring
 const AppStartupHandler = () => {
   const { isAuthenticated, loading } = useSupabaseAuth();
+  
+  // Add visibility refresh handler
+  useVisibilityRefresh();
   
   // IMPORTANT: Only run health checks and AI initialization AFTER user is authenticated
   const shouldInitialize = isAuthenticated && !loading;
@@ -221,12 +172,10 @@ const App = () => {
             }}
           >
             <UserRoleProvider>
-              <SuperAdminProvider>
                 <UnifiedYachtSentinelProvider>
                   <AppSettingsProvider>
                     <YachtProvider>
                       <AppStartupHandler />
-                      <RouterAuthGuard>
                       <Suspense fallback={<LoadingSpinner />}>
                         <Routes>
               <Route path="/auth" element={<Auth />} />
@@ -598,11 +547,9 @@ const App = () => {
               } />
                         </Routes>
                       </Suspense>
-                      </RouterAuthGuard>
                     </YachtProvider>
                   </AppSettingsProvider>
                 </UnifiedYachtSentinelProvider>
-              </SuperAdminProvider>
             </UserRoleProvider>
         </BrowserRouter>
       </ErrorBoundary>

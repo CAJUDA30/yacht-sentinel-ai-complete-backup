@@ -116,25 +116,68 @@ export const encryptApiKey = async (plaintext: string): Promise<string> => {
 };
 
 /**
- * Decrypt API key or sensitive data
+ * Decrypt API key or sensitive data with enhanced debugging
  */
 export const decryptApiKey = async (encryptedData: string): Promise<string> => {
-  if (!encryptedData) return '';
+  console.log('🔐 decryptApiKey DEBUG START:', {
+    hasData: !!encryptedData,
+    dataType: typeof encryptedData,
+    dataLength: encryptedData?.length,
+    dataPrefix: encryptedData?.substring(0, 15) + '...' || 'N/A'
+  });
+  
+  if (!encryptedData) {
+    console.warn('⚠️ decryptApiKey: Empty data provided');
+    return '';
+  }
   
   // Handle plain text fallback for development
   if (encryptedData.startsWith('PLAIN:')) {
-    return encryptedData.substring(6);
+    const plainKey = encryptedData.substring(6);
+    console.log('✅ decryptApiKey: Found PLAIN: prefix, returning plain key');
+    return plainKey;
+  }
+  
+  // If it's clearly a plain text API key (starts with known prefixes), return as-is
+  const knownPrefixes = ['xai-', 'sk-', 'claude-', 'glpat-', 'AIza'];
+  const matchedPrefix = knownPrefixes.find(prefix => encryptedData.startsWith(prefix));
+  
+  if (matchedPrefix) {
+    console.log('✅ decryptApiKey: Detected plain text API key with prefix:', matchedPrefix);
+    // Special validation for Google Gemini API keys
+    if (matchedPrefix === 'AIza' && encryptedData.length !== 39) {
+      console.warn('⚠️ decryptApiKey: Google API key length seems incorrect. Expected 39, got:', encryptedData.length);
+    }
+    return encryptedData;
+  }
+  
+  // Check if data looks like base64 encoded encrypted data
+  // Base64 data should only contain A-Z, a-z, 0-9, +, /, and = for padding
+  const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+  const looksLikeBase64 = base64Regex.test(encryptedData) && encryptedData.length >= 32;
+  
+  console.log('🔍 decryptApiKey: Base64 validation:', {
+    passesRegex: base64Regex.test(encryptedData),
+    lengthOk: encryptedData.length >= 32,
+    looksLikeBase64
+  });
+  
+  if (!looksLikeBase64) {
+    // If it doesn't look like base64 or is too short to be encrypted, treat as plain text
+    console.warn('⚠️ decryptApiKey: Data does not appear to be encrypted - treating as legacy plain text');
+    return encryptedData;
   }
   
   try {
     // Check if Web Crypto API is available
     if (!crypto || !crypto.subtle || !crypto.subtle.decrypt) {
-      console.warn('⚠️ Web Crypto API not available - treating as plain text');
+      console.warn('⚠️ decryptApiKey: Web Crypto API not available - treating as plain text');
       // If it's not a PLAIN: prefixed string but crypto is unavailable, return as-is
       // This handles legacy data that might be stored without encryption
       return encryptedData;
     }
     
+    console.log('🔐 decryptApiKey: Attempting crypto decryption...');
     const key = await getEncryptionKey();
     
     // Convert from base64
@@ -158,10 +201,12 @@ export const decryptApiKey = async (encryptedData: string): Promise<string> => {
     
     // Convert back to string
     const decoder = new TextDecoder();
-    return decoder.decode(decrypted);
+    const result = decoder.decode(decrypted);
+    console.log('✅ decryptApiKey: Crypto decryption successful, result length:', result.length);
+    return result;
   } catch (error) {
-    console.error('Decryption failed:', error);
-    console.warn('⚠️ Failed to decrypt API key - treating as legacy plain text');
+    console.error('❌ decryptApiKey: Decryption failed:', error);
+    console.warn('⚠️ decryptApiKey: Failed to decrypt API key - treating as legacy plain text');
     // Fallback: treat as plain text if decryption fails
     // This handles cases where data was stored before encryption was implemented
     return encryptedData;
@@ -220,30 +265,74 @@ export const testEncryption = async (plaintext: string): Promise<boolean> => {
 
 /**
  * Safely get API key from provider configuration
- * Handles both encrypted and plain text keys
+ * Handles both encrypted and plain text keys with enhanced debugging
+ * Checks both config and configuration fields for compatibility
  */
 export const getProviderApiKey = async (provider: any): Promise<string> => {
-  if (!provider?.configuration?.api_key) {
+  console.log('🔍 getProviderApiKey DEBUG:', {
+    hasProvider: !!provider,
+    hasConfiguration: !!provider?.configuration,
+    hasConfig: !!provider?.config,
+    hasConfigApiKey: !!provider?.config?.api_key,
+    hasConfigurationApiKey: !!provider?.configuration?.api_key,
+    providerType: provider?.provider_type,
+    providerId: provider?.id,
+    configKeys: provider?.configuration ? Object.keys(provider.configuration) : [],
+    configObjectKeys: provider?.config ? Object.keys(provider.config) : [],
+    apiKeyInConfig: !!provider?.config?.api_key,
+    apiKeyInConfiguration: !!provider?.configuration?.api_key
+  });
+  
+  // Try multiple possible API key locations for maximum compatibility
+  let apiKey = null;
+  let keySource = '';
+  
+  // Priority 1: Check configuration.api_key (primary location)
+  if (provider?.configuration?.api_key) {
+    apiKey = provider.configuration.api_key;
+    keySource = 'configuration.api_key';
+  }
+  // Priority 2: Check config.api_key (backup location)
+  else if (provider?.config?.api_key) {
+    apiKey = provider.config.api_key;
+    keySource = 'config.api_key';
+  }
+  // Priority 3: Check root level api_key (legacy support)
+  else if (provider?.api_key) {
+    apiKey = provider.api_key;
+    keySource = 'provider.api_key';
+  }
+  
+  if (!apiKey) {
+    console.error('❌ getProviderApiKey: No API key found in any location:', {
+      checkedLocations: ['configuration.api_key', 'config.api_key', 'provider.api_key'],
+      hasProvider: !!provider,
+      providerStructure: provider ? Object.keys(provider) : []
+    });
     return '';
   }
   
-  const storedKey = provider.configuration.api_key;
+  console.log('🔐 Found API key in:', keySource, {
+    apiKeyType: typeof apiKey,
+    apiKeyLength: apiKey?.length,
+    startsWithPlain: apiKey?.startsWith('PLAIN:'),
+    startsWithAIza: apiKey?.startsWith('AIza'),
+    lookLikeBase64: /^[A-Za-z0-9+/]+={0,2}$/.test(apiKey || '')
+  });
   
-  // If it's clearly a plain text API key (starts with known prefixes), return as-is
-  if (storedKey.startsWith('xai-') || 
-      storedKey.startsWith('sk-') || 
-      storedKey.startsWith('claude-') ||
-      storedKey.startsWith('glpat-') ||
-      storedKey.startsWith('PLAIN:')) {
-    return storedKey.startsWith('PLAIN:') ? storedKey.substring(6) : storedKey;
-  }
-  
-  // Try to decrypt if it looks like encrypted data
   try {
-    return await decryptApiKey(storedKey);
+    // decryptApiKey now handles plain text detection internally
+    const decryptedKey = await decryptApiKey(apiKey);
+    console.log('✅ API key decryption result:', {
+      success: !!decryptedKey,
+      decryptedLength: decryptedKey?.length,
+      decryptedPrefix: decryptedKey?.substring(0, 10) + '...' || 'N/A',
+      sourceLocation: keySource
+    });
+    return decryptedKey;
   } catch (error) {
-    console.warn('⚠️ Could not decrypt API key, treating as plain text:', error.message);
-    return storedKey;
+    console.error('❌ getProviderApiKey: Decryption failed:', error);
+    return '';
   }
 };
 
