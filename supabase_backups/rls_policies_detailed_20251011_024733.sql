@@ -1,0 +1,288 @@
+                                                     ?column?                                                      
+-------------------------------------------------------------------------------------------------------------------
+ -- Table: public.ai_health                                                                                       +
+ ALTER TABLE public.ai_health ENABLE ROW LEVEL SECURITY;                                                          +
+ CREATE POLICY "service_role_full_access" ON public.ai_health FOR ALL TO service_role                             +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "superadmin_full_access" ON public.ai_health FOR ALL TO authenticated                              +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ CREATE POLICY "authenticated_read_access" ON public.ai_health FOR SELECT TO authenticated                        +
+   USING (true);                                                                                                  +
+ 
+ -- Table: public.ai_models_unified                                                                               +
+ ALTER TABLE public.ai_models_unified ENABLE ROW LEVEL SECURITY;                                                  +
+ CREATE POLICY "superadmin_full_access" ON public.ai_models_unified FOR ALL TO authenticated                      +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ CREATE POLICY "authenticated_read_access" ON public.ai_models_unified FOR SELECT TO authenticated                +
+   USING (true);                                                                                                  +
+ CREATE POLICY "service_role_full_access" ON public.ai_models_unified FOR ALL TO service_role                     +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ 
+ -- Table: public.ai_provider_logs                                                                                +
+ ALTER TABLE public.ai_provider_logs ENABLE ROW LEVEL SECURITY;                                                   +
+ CREATE POLICY "superadmin_full_access" ON public.ai_provider_logs FOR ALL TO authenticated                       +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ CREATE POLICY "authenticated_read_access" ON public.ai_provider_logs FOR SELECT TO authenticated                 +
+   USING (true);                                                                                                  +
+ CREATE POLICY "service_role_full_access" ON public.ai_provider_logs FOR ALL TO service_role                      +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ 
+ -- Table: public.ai_providers_unified                                                                            +
+ ALTER TABLE public.ai_providers_unified ENABLE ROW LEVEL SECURITY;                                               +
+ CREATE POLICY "superadmin_full_access" ON public.ai_providers_unified FOR ALL TO authenticated                   +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ CREATE POLICY "authenticated_read_access" ON public.ai_providers_unified FOR SELECT TO authenticated             +
+   USING (true);                                                                                                  +
+ CREATE POLICY "service_role_full_access" ON public.ai_providers_unified FOR ALL TO service_role                  +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "authenticated_read_access_ai_providers" ON public.ai_providers_unified FOR SELECT TO authenticated+
+   USING (true);                                                                                                  +
+ CREATE POLICY "superadmin_full_access_ai_providers" ON public.ai_providers_unified FOR ALL TO authenticated      +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ CREATE POLICY "service_role_full_access_ai_providers" ON public.ai_providers_unified FOR ALL TO service_role     +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ 
+ -- Table: public.ai_system_config                                                                                +
+ ALTER TABLE public.ai_system_config ENABLE ROW LEVEL SECURITY;                                                   +
+ CREATE POLICY "Service role full access" ON public.ai_system_config FOR ALL TO service_role                      +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Authenticated write access" ON public.ai_system_config FOR INSERT TO authenticated                +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Superadmin delete access" ON public.ai_system_config FOR DELETE TO authenticated                  +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ CREATE POLICY "Superadmin full access" ON public.ai_system_config FOR ALL TO authenticated                       +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ CREATE POLICY "Authenticated update access" ON public.ai_system_config FOR UPDATE TO authenticated               +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Authenticated read access" ON public.ai_system_config FOR SELECT TO authenticated                 +
+   USING (true);                                                                                                  +
+ 
+ -- Table: public.analytics_events                                                                                +
+ ALTER TABLE public.analytics_events ENABLE ROW LEVEL SECURITY;                                                   +
+ CREATE POLICY "Service role full access" ON public.analytics_events FOR ALL TO service_role                      +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Superadmin full access" ON public.analytics_events FOR ALL TO authenticated                       +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ CREATE POLICY "Authenticated read access" ON public.analytics_events FOR SELECT TO authenticated                 +
+   USING (true);                                                                                                  +
+ 
+ -- Table: public.audit_workflows                                                                                 +
+ ALTER TABLE public.audit_workflows ENABLE ROW LEVEL SECURITY;                                                    +
+ CREATE POLICY "Service role full access" ON public.audit_workflows FOR ALL TO service_role                       +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Authenticated read access" ON public.audit_workflows FOR SELECT TO authenticated                  +
+   USING (true);                                                                                                  +
+ CREATE POLICY "Authenticated write access" ON public.audit_workflows FOR INSERT TO authenticated                 +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Authenticated update access" ON public.audit_workflows FOR UPDATE TO authenticated                +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Superadmin delete access" ON public.audit_workflows FOR DELETE TO authenticated                   +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ CREATE POLICY "Superadmin full access" ON public.audit_workflows FOR ALL TO authenticated                        +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ 
+ -- Table: public.edge_function_health                                                                            +
+ ALTER TABLE public.edge_function_health ENABLE ROW LEVEL SECURITY;                                               +
+ CREATE POLICY "Authenticated read access" ON public.edge_function_health FOR SELECT TO authenticated             +
+   USING (true);                                                                                                  +
+ CREATE POLICY "Service role full access" ON public.edge_function_health FOR ALL TO service_role                  +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Superadmin full access" ON public.edge_function_health FOR ALL TO authenticated                   +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ 
+ -- Table: public.edge_function_settings                                                                          +
+ ALTER TABLE public.edge_function_settings ENABLE ROW LEVEL SECURITY;                                             +
+ CREATE POLICY "Superadmin full access" ON public.edge_function_settings FOR ALL TO authenticated                 +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ CREATE POLICY "Service role full access" ON public.edge_function_settings FOR ALL TO service_role                +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Authenticated read access" ON public.edge_function_settings FOR SELECT TO authenticated           +
+   USING (true);                                                                                                  +
+ 
+ -- Table: public.event_bus                                                                                       +
+ ALTER TABLE public.event_bus ENABLE ROW LEVEL SECURITY;                                                          +
+ CREATE POLICY "Superadmin full access" ON public.event_bus FOR ALL TO authenticated                              +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ CREATE POLICY "Service role full access" ON public.event_bus FOR ALL TO service_role                             +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Authenticated read access" ON public.event_bus FOR SELECT TO authenticated                        +
+   USING (true);                                                                                                  +
+ 
+ -- Table: public.inventory_items                                                                                 +
+ ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;                                                    +
+ CREATE POLICY "service_role_full_access" ON public.inventory_items FOR ALL TO service_role                       +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "superadmin_full_access" ON public.inventory_items FOR ALL TO authenticated                        +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ CREATE POLICY "Authenticated write access" ON public.inventory_items FOR INSERT TO authenticated                 +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Authenticated update access" ON public.inventory_items FOR UPDATE TO authenticated                +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "authenticated_read_access" ON public.inventory_items FOR SELECT TO authenticated                  +
+   USING (true);                                                                                                  +
+ CREATE POLICY "Yacht owner and superadmin delete access" ON public.inventory_items FOR DELETE TO authenticated   +
+   USING (((yacht_id IN ( SELECT yachts.id                                                                        +
+    FROM yachts                                                                                                   +
+   WHERE (yachts.owner_id = auth.uid()))) OR (auth.uid() IN ( SELECT users.id                                     +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))));                                           +
+ 
+ -- Table: public.llm_provider_models                                                                             +
+ ALTER TABLE public.llm_provider_models ENABLE ROW LEVEL SECURITY;                                                +
+ CREATE POLICY "Authenticated read access" ON public.llm_provider_models FOR SELECT TO authenticated              +
+   USING (true);                                                                                                  +
+ CREATE POLICY "Service role full access" ON public.llm_provider_models FOR ALL TO service_role                   +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Superadmin full access" ON public.llm_provider_models FOR ALL TO authenticated                    +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ 
+ -- Table: public.system_settings                                                                                 +
+ ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;                                                    +
+ CREATE POLICY "authenticated_read_access" ON public.system_settings FOR SELECT TO authenticated                  +
+   USING (true);                                                                                                  +
+ CREATE POLICY "Authenticated write access" ON public.system_settings FOR INSERT TO authenticated                 +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "Authenticated update access" ON public.system_settings FOR UPDATE TO authenticated                +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "service_role_full_access" ON public.system_settings FOR ALL TO service_role                       +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "superadmin_full_access" ON public.system_settings FOR ALL TO authenticated                        +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ 
+ -- Table: public.unified_ai_configs                                                                              +
+ ALTER TABLE public.unified_ai_configs ENABLE ROW LEVEL SECURITY;                                                 +
+ CREATE POLICY "Authenticated read access" ON public.unified_ai_configs FOR SELECT TO authenticated               +
+   USING (true);                                                                                                  +
+ CREATE POLICY "Superadmin full access" ON public.unified_ai_configs FOR ALL TO authenticated                     +
+   USING ((auth.uid() IN ( SELECT users.id                                                                        +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))                                             +
+   WITH CHECK ((auth.uid() IN ( SELECT users.id                                                                   +
+    FROM auth.users                                                                                               +
+   WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))));                                            +
+ CREATE POLICY "Service role full access" ON public.unified_ai_configs FOR ALL TO service_role                    +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ 
+ -- Table: public.user_roles                                                                                      +
+ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;                                                         +
+ CREATE POLICY "users_own_roles" ON public.user_roles FOR ALL TO authenticated                                    +
+   USING ((auth.uid() = user_id))                                                                                 +
+   WITH CHECK ((auth.uid() = user_id));                                                                           +
+ CREATE POLICY "service_role_full_access" ON public.user_roles FOR ALL TO service_role                            +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "superadmin_full_access" ON public.user_roles FOR ALL TO authenticated                             +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ CREATE POLICY "users_read_own_roles" ON public.user_roles FOR SELECT TO authenticated                            +
+   USING ((auth.uid() = user_id));                                                                                +
+ 
+ -- Table: public.yacht_profiles                                                                                  +
+ ALTER TABLE public.yacht_profiles ENABLE ROW LEVEL SECURITY;                                                     +
+ CREATE POLICY "Owner full access" ON public.yacht_profiles FOR ALL TO authenticated                              +
+   USING ((auth.uid() = owner_id))                                                                                +
+   WITH CHECK ((auth.uid() = owner_id));                                                                          +
+ CREATE POLICY "authenticated_read_access" ON public.yacht_profiles FOR SELECT TO authenticated                   +
+   USING (true);                                                                                                  +
+ CREATE POLICY "service_role_full_access" ON public.yacht_profiles FOR ALL TO service_role                        +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "user_profile_access" ON public.yacht_profiles FOR ALL TO authenticated                            +
+   USING ((is_superadmin() OR (yacht_id IN ( SELECT yachts.id                                                     +
+    FROM yachts                                                                                                   +
+   WHERE (yachts.owner_id = auth.uid())))))                                                                       +
+   WITH CHECK ((is_superadmin() OR (yacht_id IN ( SELECT yachts.id                                                +
+    FROM yachts                                                                                                   +
+   WHERE (yachts.owner_id = auth.uid())))));                                                                      +
+ CREATE POLICY "superadmin_full_access" ON public.yacht_profiles FOR ALL TO authenticated                         +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ 
+ -- Table: public.yachts                                                                                          +
+ ALTER TABLE public.yachts ENABLE ROW LEVEL SECURITY;                                                             +
+ CREATE POLICY "superadmin_full_access" ON public.yachts FOR ALL TO authenticated                                 +
+   USING (is_superadmin())                                                                                        +
+   WITH CHECK (is_superadmin());                                                                                  +
+ CREATE POLICY "user_yacht_access" ON public.yachts FOR ALL TO authenticated                                      +
+   USING (((auth.uid() = owner_id) OR is_superadmin()))                                                           +
+   WITH CHECK (((auth.uid() = owner_id) OR is_superadmin()));                                                     +
+ CREATE POLICY "service_role_full_access" ON public.yachts FOR ALL TO service_role                                +
+   USING (true)                                                                                                   +
+   WITH CHECK (true);                                                                                             +
+ CREATE POLICY "authenticated_read_access" ON public.yachts FOR SELECT TO authenticated                           +
+   USING (true);                                                                                                  +
+ CREATE POLICY "Owner full access" ON public.yachts FOR ALL TO authenticated                                      +
+   USING ((auth.uid() = owner_id))                                                                                +
+   WITH CHECK ((auth.uid() = owner_id));                                                                          +
+ 
+(17 rows)
+

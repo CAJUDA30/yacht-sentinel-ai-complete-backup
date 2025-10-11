@@ -1,0 +1,23 @@
+-- Populate guest_charters with realistic data
+INSERT INTO guest_charters (charter_name, primary_guest_name, yacht_id, start_date, end_date, guest_count, charter_value, deposit_amount, balance_due, start_port, end_port, status, payment_status, broker_name, broker_commission, preferences, dietary_requirements, special_requests) VALUES
+('Mediterranean Summer 2024', 'John Smith', (SELECT id FROM yacht_profiles LIMIT 1), '2024-07-15', '2024-07-22', 8, 125000.00, 37500.00, 87500.00, 'Monaco', 'St. Tropez', 'confirmed', 'deposit_paid', 'Elite Yacht Charters', 12.5, '{"preferred_cuisine": "Mediterranean", "activity_level": "high"}', '["vegetarian options", "gluten-free options"]', '["private chef", "water sports equipment", "helicopter transfer"]'),
+('Caribbean Winter Escape', 'Maria Garcia', (SELECT id FROM yacht_profiles LIMIT 1 OFFSET 1), '2024-12-20', '2024-12-27', 6, 95000.00, 28500.00, 66500.00, 'Barbados', 'St. Lucia', 'confirmed', 'paid_in_full', 'Caribbean Luxury Yachts', 10.0, '{"preferred_cuisine": "Caribbean", "activity_level": "relaxed"}', '["dairy-free options", "pescatarian"]', '["spa services", "diving equipment", "romantic setup"]'),
+('Greek Islands Adventure', 'Robert Johnson', (SELECT id FROM yacht_profiles LIMIT 1 OFFSET 2), '2024-09-10', '2024-09-17', 10, 155000.00, 46500.00, 108500.00, 'Athens', 'Mykonos', 'confirmed', 'deposit_paid', 'Aegean Yacht Brokers', 15.0, '{"preferred_cuisine": "Greek", "activity_level": "moderate"}', '["kosher meals", "vegan options"]', '["cultural tours", "fishing equipment", "photography services"]'),
+('Adriatic Luxury Cruise', 'Sophie Williams', (SELECT id FROM yacht_profiles LIMIT 1), '2024-08-05', '2024-08-12', 7, 110000.00, 33000.00, 77000.00, 'Venice', 'Dubrovnik', 'pending', 'pending', 'Adriatic Elite', 12.0, '{"preferred_cuisine": "Italian", "activity_level": "high"}', '["wine pairing", "organic foods"]', '["sommelier service", "art gallery visits", "private concerts"]'),
+('French Riviera Getaway', 'David Brown', (SELECT id FROM yacht_profiles LIMIT 1 OFFSET 1), '2024-06-01', '2024-06-08', 9, 140000.00, 42000.00, 98000.00, 'Cannes', 'Nice', 'completed', 'paid_in_full', 'Riviera Prestige', 13.0, '{"preferred_cuisine": "French", "activity_level": "luxury"}', '["champagne selection", "fine dining"]', '["Michelin chef", "luxury shopping", "casino access"]');
+
+-- Populate fuel_consumption with realistic data
+INSERT INTO fuel_consumption (yacht_id, consumption_date, fuel_consumed_liters, distance_nautical_miles, engine_hours, average_speed, fuel_efficiency, route_taken, weather_conditions, sea_state, notes) VALUES
+((SELECT id FROM yacht_profiles LIMIT 1), '2024-01-15', 450.5, 85.2, 8.5, 10.2, 5.29, 'Monaco to Antibes', 'Clear skies, light winds 5-8 knots', 'Calm, 0.5m waves', 'Optimal cruising conditions'),
+((SELECT id FROM yacht_profiles LIMIT 1), '2024-01-20', 680.3, 125.8, 12.3, 10.8, 5.41, 'Antibes to St. Tropez', 'Partly cloudy, moderate winds 12-15 knots', 'Moderate, 1.2m waves', 'Slightly rough seas, reduced speed'),
+((SELECT id FROM yacht_profiles LIMIT 1 OFFSET 1), '2024-01-18', 520.7, 95.3, 9.8, 9.7, 5.46, 'Palma to Ibiza', 'Sunny, light winds 6-10 knots', 'Calm, 0.3m waves', 'Perfect weather conditions'),
+((SELECT id FROM yacht_profiles LIMIT 1 OFFSET 2), '2024-01-22', 750.2, 140.5, 14.2, 9.9, 5.34, 'Athens to Mykonos', 'Overcast, strong winds 20-25 knots', 'Rough, 2.1m waves', 'Challenging conditions, increased consumption'),
+((SELECT id FROM yacht_profiles LIMIT 1), '2024-02-01', 395.8, 72.4, 7.1, 10.4, 5.47, 'Monaco harbor cruise', 'Clear, calm winds 3-5 knots', 'Very calm, 0.2m waves', 'Local cruise, efficient operation');
+
+-- Populate yacht_positions with recent realistic data
+INSERT INTO yacht_positions (yacht_id, latitude, longitude, speed_knots, heading_degrees, depth_meters, wind_speed_knots, wind_direction_degrees, sea_temperature_celsius, air_temperature_celsius, barometric_pressure, visibility_meters, recorded_at) VALUES
+((SELECT id FROM yacht_profiles LIMIT 1), 43.7347, 7.4206, 8.5, 95, 45.2, 12.3, 135, 18.5, 22.3, 1013.2, 8500, NOW() - INTERVAL '5 minutes'),
+((SELECT id FROM yacht_profiles LIMIT 1 OFFSET 1), 39.6208, 2.9819, 0.0, 0, 28.7, 8.7, 180, 16.8, 19.5, 1015.8, 12000, NOW() - INTERVAL '3 minutes'),
+((SELECT id FROM yacht_profiles LIMIT 1 OFFSET 2), 37.9405, 23.6500, 6.2, 220, 52.3, 15.8, 200, 17.2, 21.8, 1012.5, 6500, NOW() - INTERVAL '8 minutes'),
+((SELECT id FROM yacht_profiles LIMIT 1), 43.7384, 7.4287, 0.0, 0, 12.5, 5.2, 90, 18.9, 23.1, 1014.1, 15000, NOW() - INTERVAL '1 minute'),
+((SELECT id FROM yacht_profiles LIMIT 1 OFFSET 1), 39.6180, 2.9750, 4.3, 45, 31.2, 9.8, 160, 17.1, 20.2, 1016.2, 10000, NOW() - INTERVAL '12 minutes');

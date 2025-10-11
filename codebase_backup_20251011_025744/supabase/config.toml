@@ -1,0 +1,69 @@
+
+project_id = "vdjsfupbjtbkpuvwffbn"
+
+# Document AI processing functions
+[functions.document-ai-working]
+verify_jwt = true
+
+# UNIFIED SCANNING - Only gcp-unified-config for Document AI processing
+[functions.gcp-unified-config]
+verify_jwt = true
+
+# Core system functions
+[functions.production-system-monitor]
+verify_jwt = false
+
+[functions.universal-search]
+verify_jwt = false
+
+[functions.voice-processor]
+verify_jwt = false
+
+[functions.system-monitor]
+verify_jwt = false
+
+[functions.windy-weather]
+verify_jwt = false
+
+[functions.vision-config]
+verify_jwt = false
+
+[functions.ai-admin]
+verify_jwt = true
+
+[functions.logs-suggest-solution]
+verify_jwt = true
+
+[functions.discover-ai-models]
+verify_jwt = true
+
+[functions.equipment-research]
+verify_jwt = false
+
+[functions.iot-maritime-integration]
+verify_jwt = false
+
+[functions.test-ai-model]
+verify_jwt = true
+
+[functions.unified-voice-ai]
+verify_jwt = false
+
+[functions.voice-assistant]
+verify_jwt = false
+
+# Management and health
+[functions.edge-control]
+verify_jwt = true
+
+[functions.llm-proxy]
+verify_jwt = true
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.yacht-auth-emails]
+verify_jwt = false
+
+[functions.setup-2fa]
+verify_jwt = true

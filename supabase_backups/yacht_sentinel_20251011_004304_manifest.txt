@@ -1,0 +1,23 @@
+Yacht Sentinel AI Database Backup
+==================================
+Backup Name: yacht_sentinel_20251011_004304
+Created: Sat Oct 11 00:43:04 CEST 2025
+Database: postgres
+Host: 127.0.0.1:54322
+Size: 332K
+
+Files:
+- yacht_sentinel_20251011_004304.dump (PostgreSQL custom format - for restore)
+- yacht_sentinel_20251011_004304.sql.gz (SQL text format - compressed)
+- yacht_sentinel_20251011_004304_auth.sql.gz (Auth tables only - compressed)
+
+To restore:
+-----------
+1. Full restore:
+   pg_restore -h 127.0.0.1 -p 54322 -U postgres -d postgres -c ./supabase_backups/yacht_sentinel_20251011_004304.dump
+
+2. Auth only restore:
+   gunzip -c ./supabase_backups/yacht_sentinel_20251011_004304_auth.sql.gz | psql -h 127.0.0.1 -p 54322 -U postgres -d postgres
+
+3. SQL restore:
+   gunzip -c ./supabase_backups/yacht_sentinel_20251011_004304.sql.gz | psql -h 127.0.0.1 -p 54322 -U postgres -d postgres

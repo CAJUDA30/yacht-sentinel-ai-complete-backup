@@ -1,0 +1,59 @@
+MIT License
+
+Copyright (c) 2025 Carlos Julia (CAJUDA30) - YachtExcel
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## Additional Terms for Enterprise Use
+
+### Commercial Use
+This software may be used for commercial purposes under the MIT License terms.
+Enterprise users are encouraged to contribute improvements back to the community.
+
+### Attribution
+While not required by the MIT License, attribution is appreciated:
+- "Powered by YachtExcel" in your application
+- Link to https://github.com/CAJUDA30/yacht-sentinel-ai-05
+
+### Support
+- Community support via GitHub Issues
+- Enterprise support available upon request
+- Custom development and consulting services available
+
+### Third-Party Components
+This software includes third-party libraries with their own licenses:
+- React (MIT License)
+- TypeScript (Apache 2.0 License)
+- Supabase (Apache 2.0 License)
+- Tailwind CSS (MIT License)
+- And other dependencies as listed in package.json
+
+### API Integrations
+This software integrates with third-party APIs that have their own terms:
+- Google Document AI (Google Cloud Terms of Service)
+- OpenAI API (OpenAI Terms of Use)
+- Supabase (Supabase Terms of Service)
+
+Users are responsible for compliance with all third-party service terms.
+
+---
+
+For questions about licensing, contact: carlos@cbls.co

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Login - Yacht Sentinel AI</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 500px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        .info { background: rgba(59, 130, 246, 0.3); }
+        .success { background: rgba(34, 197, 94, 0.3); }
+        .error { background: rgba(239, 68, 68, 0.3); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Login</h1>
+        
+        <div class="status info">
+            <strong>Purpose:</strong> Test authentication after clearing stale tokens
+        </div>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" value="superadmin@yachtexcel.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="Enter password" required>
+            </div>
+            
+            <button type="submit">🔑 Test Login</button>
+            <button type="button" onclick="resetPassword()">🔄 Reset Password</button>
+        </form>
+
+        <div id="results"></div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+        
+        const supabase = createClient(
+            'https://vdjsfupbjtbkpuvwffbn.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkanNmdXBianRia3B1dndmZmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMjc4MTMsImV4cCI6MjA2OTgwMzgxM30.3sLKA1llE4tRBUaLzZhlLqzvM14d9db5v__GIvwvSng'
+        );
+
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            addResult('🔍 Testing login...', 'info');
+            
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                });
+                
+                if (error) {
+                    addResult(`❌ Login failed: ${error.message}`, 'error');
+                } else {
+                    addResult(`✅ Login successful!`, 'success');
+                    addResult(`👋 Welcome back: ${data.user.email}`, 'success');
+                    addResult('🔄 Redirecting to main app...', 'info');
+                    
+                    setTimeout(() => {
+                        window.location.href = 'http://localhost:5173/';
+                    }, 2000);
+                }
+            } catch (error) {
+                addResult(`❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        window.resetPassword = async () => {
+            const email = document.getElementById('email').value;
+            
+            if (!email) {
+                addResult('❌ Please enter an email address first', 'error');
+                return;
+            }
+            
+            addResult('📧 Sending password reset email...', 'info');
+            
+            try {
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: 'http://localhost:5173/auth'
+                });
+                
+                if (error) {
+                    addResult(`❌ Reset failed: ${error.message}`, 'error');
+                } else {
+                    addResult('✅ Password reset email sent! Check your inbox.', 'success');
+                }
+            } catch (error) {
+                addResult(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+    </script>
+</body>
+</html>

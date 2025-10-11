@@ -1,0 +1,38 @@
+                                Table "public.system_settings"
+   Column    |           Type           | Collation | Nullable |           Default            
+-------------+--------------------------+-----------+----------+------------------------------
+ id          | uuid                     |           | not null | gen_random_uuid()
+ key         | text                     |           | not null | 
+ value       | jsonb                    |           | not null | '{}'::jsonb
+ description | text                     |           |          | 
+ category    | text                     |           |          | 'system'::text
+ is_public   | boolean                  |           |          | false
+ created_at  | timestamp with time zone |           | not null | timezone('utc'::text, now())
+ updated_at  | timestamp with time zone |           | not null | timezone('utc'::text, now())
+Indexes:
+    "system_settings_pkey" PRIMARY KEY, btree (id)
+    "idx_system_settings_category" btree (category)
+    "idx_system_settings_key" btree (key)
+    "system_settings_key_key" UNIQUE CONSTRAINT, btree (key)
+Policies:
+    POLICY "Authenticated update access" FOR UPDATE
+      TO authenticated
+      USING (true)
+      WITH CHECK (true)
+    POLICY "Authenticated write access" FOR INSERT
+      TO authenticated
+      WITH CHECK (true)
+    POLICY "authenticated_read_access" FOR SELECT
+      TO authenticated
+      USING (true)
+    POLICY "service_role_full_access"
+      TO service_role
+      USING (true)
+      WITH CHECK (true)
+    POLICY "superadmin_full_access"
+      TO authenticated
+      USING (is_superadmin())
+      WITH CHECK (is_superadmin())
+Triggers:
+    trigger_system_settings_updated_at BEFORE UPDATE ON system_settings FOR EACH ROW EXECUTE FUNCTION handle_updated_at()
+

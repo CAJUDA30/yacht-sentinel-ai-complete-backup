@@ -1,0 +1,342 @@
+SET session_replication_role = replica;
+
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 17.6
+-- Dumped by pg_dump version 17.4
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Data for Name: audit_log_entries; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+INSERT INTO "auth"."audit_log_entries" ("instance_id", "id", "payload", "created_at", "ip_address") VALUES
+	('00000000-0000-0000-0000-000000000000', '8e4ed9a4-d2bc-4498-a123-dfeee539d679', '{"action":"login","actor_id":"339e3acc-a5a0-43ff-ae07-924fc32a292a","actor_username":"superadmin@yachtexcel.com","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}', '2025-10-10 23:13:20.15057+00', ''),
+	('00000000-0000-0000-0000-000000000000', 'b4b13b0d-2ce3-483b-8484-92408769e6d8', '{"action":"logout","actor_id":"339e3acc-a5a0-43ff-ae07-924fc32a292a","actor_username":"superadmin@yachtexcel.com","actor_via_sso":false,"log_type":"account"}', '2025-10-10 23:20:58.330355+00', ''),
+	('00000000-0000-0000-0000-000000000000', '7b27a9bb-f765-47ab-b582-2a45b2e616ed', '{"action":"login","actor_id":"339e3acc-a5a0-43ff-ae07-924fc32a292a","actor_username":"superadmin@yachtexcel.com","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}', '2025-10-10 23:21:07.62776+00', '');
+
+
+--
+-- Data for Name: flow_state; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: users; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+INSERT INTO "auth"."users" ("instance_id", "id", "aud", "role", "email", "encrypted_password", "email_confirmed_at", "invited_at", "confirmation_token", "confirmation_sent_at", "recovery_token", "recovery_sent_at", "email_change_token_new", "email_change", "email_change_sent_at", "last_sign_in_at", "raw_app_meta_data", "raw_user_meta_data", "is_super_admin", "created_at", "updated_at", "phone", "phone_confirmed_at", "phone_change", "phone_change_token", "phone_change_sent_at", "email_change_token_current", "email_change_confirm_status", "banned_until", "reauthentication_token", "reauthentication_sent_at", "is_sso_user", "deleted_at", "is_anonymous") VALUES
+	('00000000-0000-0000-0000-000000000000', '339e3acc-a5a0-43ff-ae07-924fc32a292a', 'authenticated', 'authenticated', 'superadmin@yachtexcel.com', '$2a$10$UZHC2VopY/nQByggIMSLw.b6iOZIQKA8CyuQ.N1ikQi.y4WCVVjbW', '2025-10-10 23:11:14.001212+00', NULL, '', NULL, '', NULL, '', '', NULL, '2025-10-10 23:21:07.628124+00', '{"provider": "email", "providers": ["email"]}', '{"role": "superadmin", "is_superadmin": true}', false, '2025-10-10 23:04:37.110815+00', '2025-10-10 23:21:07.628974+00', NULL, NULL, '', '', NULL, '', 0, NULL, '', NULL, false, NULL, false);
+
+
+--
+-- Data for Name: identities; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: instances; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: oauth_clients; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: sessions; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+INSERT INTO "auth"."sessions" ("id", "user_id", "created_at", "updated_at", "factor_id", "aal", "not_after", "refreshed_at", "user_agent", "ip", "tag", "oauth_client_id") VALUES
+	('e236b75f-b427-4f89-a639-d91d6cadea50', '339e3acc-a5a0-43ff-ae07-924fc32a292a', '2025-10-10 23:21:07.628197+00', '2025-10-10 23:21:07.628197+00', NULL, 'aal1', NULL, NULL, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36', '142.250.184.10', NULL, NULL);
+
+
+--
+-- Data for Name: mfa_amr_claims; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+INSERT INTO "auth"."mfa_amr_claims" ("session_id", "created_at", "updated_at", "authentication_method", "id") VALUES
+	('e236b75f-b427-4f89-a639-d91d6cadea50', '2025-10-10 23:21:07.629084+00', '2025-10-10 23:21:07.629084+00', 'password', 'f9496366-b1e6-4c3e-ba6b-378e5c4fa202');
+
+
+--
+-- Data for Name: mfa_factors; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: mfa_challenges; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: oauth_authorizations; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: oauth_consents; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: one_time_tokens; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: refresh_tokens; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+INSERT INTO "auth"."refresh_tokens" ("instance_id", "id", "token", "user_id", "revoked", "created_at", "updated_at", "parent", "session_id") VALUES
+	('00000000-0000-0000-0000-000000000000', 2, 'njknkqfj2scz', '339e3acc-a5a0-43ff-ae07-924fc32a292a', false, '2025-10-10 23:21:07.628575+00', '2025-10-10 23:21:07.628575+00', NULL, 'e236b75f-b427-4f89-a639-d91d6cadea50');
+
+
+--
+-- Data for Name: sso_providers; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: saml_providers; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: saml_relay_states; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: sso_domains; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+
+
+--
+-- Data for Name: ai_providers_unified; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "public"."ai_providers_unified" ("id", "name", "base_url", "api_endpoint", "auth_type", "auth_header_name", "api_secret_name", "models_endpoint", "discovery_url", "description", "capabilities", "config", "is_active", "created_at", "updated_at", "auth_method", "provider_type", "priority", "is_primary", "rate_limit_per_minute", "supported_languages", "last_health_check", "health_status", "error_count", "success_rate") VALUES
+	('b6b2a892-0278-46dd-bf88-977bf80f3ec5', 'OpenAI', 'https://api.openai.com', 'https://api.openai.com/v1', 'bearer', 'Authorization', NULL, 'https://api.openai.com/v1/models', NULL, 'OpenAI GPT models', '{}', '{}', true, '2025-10-10 23:04:02.333156+00', '2025-10-10 23:04:02.340853+00', 'api_key', 'openai', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('5802e3b5-10d0-4473-b89c-29cec1aaa48d', 'Google Gemini', 'https://generativelanguage.googleapis.com', 'https://generativelanguage.googleapis.com/v1beta', 'bearer', 'Authorization', NULL, NULL, NULL, 'Google Gemini AI models', '{}', '{}', true, '2025-10-10 23:04:02.333156+00', '2025-10-10 23:04:02.340853+00', 'api_key', 'google', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('96320b69-b11b-43db-bd93-69d7dbe0e42c', 'DeepSeek', 'https://api.deepseek.com', 'https://api.deepseek.com/v1', 'bearer', 'Authorization', NULL, 'https://api.deepseek.com/v1/models', NULL, 'DeepSeek AI models', '{}', '{}', true, '2025-10-10 23:04:02.333156+00', '2025-10-10 23:04:02.340853+00', 'api_key', 'deepseek', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('54d22da4-8a7d-4def-a544-040bc6eaf377', 'schema_test_1760138006830', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:13:26.832238+00', '2025-10-10 23:13:26.832238+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('c9cfa74a-243a-4468-adaa-7bcc435710f1', 'schema_test_1760138006849', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:13:26.849063+00', '2025-10-10 23:13:26.849063+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('ed64a55e-a58e-4a6f-894c-c30753d59de6', 'schema_test_1760138353448', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:19:13.452773+00', '2025-10-10 23:19:13.452773+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('b5dd0cfc-a272-44b4-81fc-954ef4a15255', 'schema_test_1760138353454', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:19:13.456567+00', '2025-10-10 23:19:13.456567+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('d484c2f3-dbc1-45b3-9ed5-b35bb56e3e49', 'schema_test_1760138378370', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:19:38.374159+00', '2025-10-10 23:19:38.374159+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('6262e189-4d00-474e-ae4c-60633c7131f2', 'schema_test_1760138378374', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:19:38.376669+00', '2025-10-10 23:19:38.376669+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('cfb8155c-1e6b-46c8-8457-e46aef7b32ec', 'schema_test_1760138444300', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:20:44.300741+00', '2025-10-10 23:20:44.300741+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('e892b011-4cf1-44c3-a556-688d6011cc06', 'schema_test_1760138444299', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:20:44.300745+00', '2025-10-10 23:20:44.300745+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('9717d50f-f9bc-4943-91e8-42c44fa925ee', 'schema_test_1760138473318', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:21:13.319688+00', '2025-10-10 23:21:13.319688+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00),
+	('1d1183ad-de84-498d-903b-b65b3953eedf', 'schema_test_1760138473325', NULL, NULL, 'bearer', 'Authorization', NULL, NULL, NULL, NULL, '{}', '{"test": true}', true, '2025-10-10 23:21:13.325321+00', '2025-10-10 23:21:13.325321+00', 'api_key', 'test', 1, false, 60, '{en}', NULL, 'unknown', 0, 100.00);
+
+
+--
+-- Data for Name: ai_health; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: ai_models_unified; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "public"."ai_models_unified" ("id", "created_at", "updated_at", "name", "display_name", "provider_id", "model_type", "is_active", "max_tokens", "input_cost_per_token", "output_cost_per_token", "config", "capabilities", "priority", "description") VALUES
+	('2380d9d9-ed42-4788-b89d-aa541f840ea9', '2025-10-10 23:04:02.343941+00', '2025-10-10 23:04:02.343941+00', 'gpt-4o', 'GPT-4o (Latest)', 'b6b2a892-0278-46dd-bf88-977bf80f3ec5', 'text', true, 128000, NULL, NULL, '{}', '{}', 1, 'OpenAI GPT-4o - Latest multimodal model'),
+	('e2e4a609-3b15-4554-9b43-7cac91c112f8', '2025-10-10 23:04:02.343941+00', '2025-10-10 23:04:02.343941+00', 'gemini-1.5-pro-002', 'Gemini 1.5 Pro', '5802e3b5-10d0-4473-b89c-29cec1aaa48d', 'text', true, 2097152, NULL, NULL, '{}', '{}', 1, 'Google Gemini 1.5 Pro - Large context window'),
+	('32fc68c8-ecad-4d02-8b2a-5d8079207ff9', '2025-10-10 23:04:02.343941+00', '2025-10-10 23:04:02.343941+00', 'deepseek-chat', 'DeepSeek Chat', '96320b69-b11b-43db-bd93-69d7dbe0e42c', 'text', true, 32768, NULL, NULL, '{}', '{}', 1, 'DeepSeek Chat - Efficient reasoning model');
+
+
+--
+-- Data for Name: ai_provider_logs; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: ai_system_config; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: analytics_events; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: audit_workflows; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: edge_function_health; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: edge_function_settings; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: event_bus; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: inventory_items; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: llm_provider_models; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: system_settings; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "public"."system_settings" ("id", "key", "value", "description", "category", "is_public", "created_at", "updated_at") VALUES
+	('f83a7432-c9ba-44df-ba9a-40b61e04c7f9', 'system.maintenance', 'false', 'System maintenance mode flag', 'system', false, '2025-10-10 23:04:02.322437+00', '2025-10-10 23:04:02.322437+00'),
+	('3ffc909c-3cae-4496-8bc4-b3aa2d6dc09c', 'system.registration', 'true', 'User registration enabled flag', 'system', false, '2025-10-10 23:04:02.322437+00', '2025-10-10 23:04:02.322437+00'),
+	('86795574-2ad8-42dd-b3c9-a6460d6b8838', 'system.maxFileSize', '10485760', 'Maximum file upload size in bytes (10MB)', 'system', false, '2025-10-10 23:04:02.322437+00', '2025-10-10 23:04:02.322437+00');
+
+
+--
+-- Data for Name: unified_ai_configs; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: user_roles; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "public"."user_roles" ("id", "user_id", "role", "created_at", "updated_at") VALUES
+	('0fcdc499-f7a3-4ba3-aeff-519659eb0a73', '339e3acc-a5a0-43ff-ae07-924fc32a292a', 'user', '2025-10-10 23:07:37.544599+00', '2025-10-10 23:07:37.544599+00'),
+	('b36f1da0-d70e-4c65-af13-d22c7ab7ed42', '339e3acc-a5a0-43ff-ae07-924fc32a292a', 'admin', '2025-10-10 23:07:37.544599+00', '2025-10-10 23:07:37.544599+00'),
+	('5eec5fd4-d1fa-4d69-a421-1618ee2aa1e9', '339e3acc-a5a0-43ff-ae07-924fc32a292a', 'superadmin', '2025-10-10 23:04:37.110815+00', '2025-10-10 23:11:21.570343+00');
+
+
+--
+-- Data for Name: yachts; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: yacht_profiles; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- Data for Name: buckets; Type: TABLE DATA; Schema: storage; Owner: supabase_storage_admin
+--
+
+
+
+--
+-- Data for Name: buckets_analytics; Type: TABLE DATA; Schema: storage; Owner: supabase_storage_admin
+--
+
+
+
+--
+-- Data for Name: iceberg_namespaces; Type: TABLE DATA; Schema: storage; Owner: supabase_storage_admin
+--
+
+
+
+--
+-- Data for Name: iceberg_tables; Type: TABLE DATA; Schema: storage; Owner: supabase_storage_admin
+--
+
+
+
+--
+-- Data for Name: objects; Type: TABLE DATA; Schema: storage; Owner: supabase_storage_admin
+--
+
+
+
+--
+-- Data for Name: prefixes; Type: TABLE DATA; Schema: storage; Owner: supabase_storage_admin
+--
+
+
+
+--
+-- Data for Name: s3_multipart_uploads; Type: TABLE DATA; Schema: storage; Owner: supabase_storage_admin
+--
+
+
+
+--
+-- Data for Name: s3_multipart_uploads_parts; Type: TABLE DATA; Schema: storage; Owner: supabase_storage_admin
+--
+
+
+
+--
+-- Data for Name: hooks; Type: TABLE DATA; Schema: supabase_functions; Owner: supabase_functions_admin
+--
+
+
+
+--
+-- Name: refresh_tokens_id_seq; Type: SEQUENCE SET; Schema: auth; Owner: supabase_auth_admin
+--
+
+SELECT pg_catalog.setval('"auth"."refresh_tokens_id_seq"', 2, true);
+
+
+--
+-- Name: hooks_id_seq; Type: SEQUENCE SET; Schema: supabase_functions; Owner: supabase_functions_admin
+--
+
+SELECT pg_catalog.setval('"supabase_functions"."hooks_id_seq"', 1, false);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+RESET ALL;
