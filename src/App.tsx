@@ -21,6 +21,7 @@ import { enterpriseHealthOrchestrator } from '@/services/enterpriseHealthOrchest
 import { debugConsole } from '@/services/debugConsole';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useVisibilityRefresh } from '@/hooks/useVisibilityRefresh';
+import { rlsHealthService } from '@/services/rlsHealthService';
 
 // Lazy load components for better performance
 import { lazy, Suspense } from "react";
@@ -123,6 +124,10 @@ const AppStartupHandler = () => {
       try {
         debugConsole.info('SYSTEM', '🏢 Initializing Enterprise Health Orchestrator - Zero Manual Intervention Mode');
         
+        // Initialize RLS Health Service first (critical for DELETE operations)
+        debugConsole.info('SYSTEM', '🔒 Initializing RLS Health Monitoring - Preventing Policy Conflicts');
+        await rlsHealthService.initialize();
+        
         // Start fully automated enterprise health monitoring
         await enterpriseHealthOrchestrator.initializeAutomatedMonitoring();
         
@@ -130,7 +135,8 @@ const AppStartupHandler = () => {
           monitoring_mode: 'fully_automated',
           manual_intervention: 'disabled',
           systematic_verification: 'enabled',
-          professional_monitoring: 'active'
+          professional_monitoring: 'active',
+          rls_health_monitoring: 'active'
         });
         
       } catch (error: any) {
@@ -149,6 +155,7 @@ const AppStartupHandler = () => {
     return () => {
       clearTimeout(initTimeout);
       if (isInitialized) {
+        rlsHealthService.destroy();
         enterpriseHealthOrchestrator.cleanup();
       }
     };

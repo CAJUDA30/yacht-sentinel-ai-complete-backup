@@ -166,9 +166,77 @@ class DebugConsoleService {
   }
 
   logProviderError(providerId: string, providerName: string, error: any, context?: string): void {
-    this.error('PROVIDER_ERROR', `${context || 'Unknown'}: ${error.message || error}`, {
-      error: error.stack || error,
-      context
+    // Enhanced error logging with comprehensive object handling
+    let errorMessage = 'Unknown error';
+    let errorDetails: any = {};
+    
+    // Handle different error types more comprehensively
+    if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error === null || error === undefined) {
+      errorMessage = 'Null or undefined error';
+    } else if (error && typeof error === 'object') {
+      // Try multiple approaches to extract meaningful error message
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.error && typeof error.error === 'string') {
+        errorMessage = error.error;
+      } else if (error.error && error.error.message) {
+        errorMessage = error.error.message;
+      } else if (error.statusText) {
+        errorMessage = error.statusText;
+      } else if (error.toString && error.toString() !== '[object Object]') {
+        errorMessage = error.toString();
+      } else {
+        // Fallback: extract meaningful information from object properties
+        const meaningfulProps = [];
+        if (error.status) meaningfulProps.push(`Status: ${error.status}`);
+        if (error.code) meaningfulProps.push(`Code: ${error.code}`);
+        if (error.type) meaningfulProps.push(`Type: ${error.type}`);
+        if (error.name) meaningfulProps.push(`Name: ${error.name}`);
+        
+        errorMessage = meaningfulProps.length > 0 
+          ? meaningfulProps.join(', ')
+          : 'Complex error object - check details';
+      }
+      
+      // Build comprehensive error details
+      errorDetails = {
+        errorType: error.constructor?.name || typeof error,
+        errorCode: error.code,
+        errorStatus: error.status,
+        errorName: error.name,
+        hasMessage: !!error.message,
+        hasStack: !!error.stack,
+        objectKeys: Object.keys(error)
+      };
+      
+      // Add stack trace for debugging (truncated)
+      if (error.stack && typeof error.stack === 'string') {
+        errorDetails.stackPreview = error.stack.split('\n').slice(0, 3).join('\n');
+      }
+      
+      // Special handling for specific error types
+      if (error.name === 'AbortError') {
+        errorMessage = 'Connection test timed out';
+      } else if (error.name === 'TypeError' && error.message?.includes('fetch')) {
+        errorMessage = 'Network connection failed - please check endpoint URL';
+      } else if (error.name === 'SyntaxError') {
+        errorMessage = 'Invalid response format received from API';
+      }
+    } else {
+      // Handle primitive types
+      errorMessage = String(error);
+      errorDetails = { originalType: typeof error, convertedValue: String(error) };
+    }
+    
+    // Log with enhanced context
+    this.error('PROVIDER_ERROR', `${context || 'Unknown'}: ${errorMessage}`, {
+      error: errorDetails,
+      context,
+      errorMessageLength: errorMessage.length,
+      originalErrorType: typeof error,
+      timestamp: new Date().toISOString()
     }, providerId, providerName);
   }
 
@@ -219,7 +287,7 @@ class DebugConsoleService {
 // Create singleton instance
 export const debugConsole = new DebugConsoleService();
 
-// Provider connection testing utilities
+// Provider connection testing utilities with enhanced error prevention
 export const testProviderConnection = async (
   provider: any,
   apiKey?: string
@@ -231,68 +299,140 @@ export const testProviderConnection = async (
 
   const startTime = Date.now();
   
-  // Create a single AbortController for the entire operation
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort('Connection test timeout');
-  }, 15000); // Increased timeout for model discovery + test
-  
+  // Enhanced parameter validation to prevent fetch errors
   try {
-    // Validate required fields
-    if (!provider.api_endpoint) {
-      clearTimeout(timeoutId);
-      throw new Error('API endpoint is required');
+    // Validate provider object
+    if (!provider || typeof provider !== 'object') {
+      throw new Error('Invalid provider object - must be a valid object');
     }
 
-    if (!apiKey) {
-      clearTimeout(timeoutId);
-      throw new Error('API key is required');
+    // Validate and sanitize API endpoint
+    const endpoint = provider.api_endpoint || provider.config?.api_endpoint;
+    if (!endpoint || typeof endpoint !== 'string' || !endpoint.trim()) {
+      throw new Error('API endpoint is required and must be a valid non-empty string');
     }
 
-    debugConsole.logProviderTest(providerId, providerName, 'VALIDATION', 'Basic validation passed', {
-      endpoint: provider.api_endpoint,
+    // Validate endpoint format
+    try {
+      const url = new URL(endpoint.trim());
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('API endpoint must use HTTP or HTTPS protocol');
+      }
+    } catch (urlError) {
+      throw new Error(`Invalid API endpoint URL format: ${endpoint}`);
+    }
+
+    // Enhanced API key validation
+    if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
+      throw new Error('API key is required and must be a valid non-empty string');
+    }
+
+    // Import and use sanitization function with provider context
+    const { sanitizeApiKeyForHeaders } = await import('@/utils/encryption');
+    const sanitizationResult = sanitizeApiKeyForHeaders(apiKey, provider.provider_type);
+    
+    if (!sanitizationResult.isValid || !sanitizationResult.sanitized) {
+      throw new Error(`API key validation failed: ${sanitizationResult.error}`);
+    }
+
+    const sanitizedApiKey = sanitizationResult.sanitized;
+
+    debugConsole.logProviderTest(providerId, providerName, 'VALIDATION', 'Enhanced validation passed', {
+      endpoint: endpoint.trim(),
       provider_type: provider.provider_type,
-      authMethod: provider.configuration?.auth_method
+      authMethod: provider.configuration?.auth_method,
+      apiKeyLength: sanitizedApiKey.length,
+      apiKeyPrefix: sanitizedApiKey.substring(0, 4),
+      sanitizationApplied: true
     });
 
-    // Provider-specific connection testing
-    const connectionResult = await testProviderConnectionByType(provider, apiKey, controller);
+    // Create a single AbortController for the entire operation
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort('Connection test timeout after 15 seconds');
+    }, 15000);
     
-    clearTimeout(timeoutId);
-    const latency = Date.now() - startTime;
+    try {
+      // Provider-specific connection testing with sanitized parameters
+      const connectionResult = await testProviderConnectionByType(
+        {
+          ...provider,
+          api_endpoint: endpoint.trim() // Use validated endpoint
+        }, 
+        sanitizedApiKey, // Use sanitized API key
+        controller
+      );
+      
+      clearTimeout(timeoutId);
+      const latency = Date.now() - startTime;
 
-    if (connectionResult.success) {
-      debugConsole.logProviderSuccess(providerId, providerName, 'CONNECTION_TEST', {
-        latency: `${latency}ms`,
-        provider_type: provider.provider_type,
-        response: connectionResult.details
-      });
-    } else {
-      debugConsole.logProviderError(providerId, providerName, {
+      if (connectionResult.success) {
+        debugConsole.logProviderSuccess(providerId, providerName, 'CONNECTION_TEST', {
+          latency: `${latency}ms`,
+          provider_type: provider.provider_type,
+          response: connectionResult.details,
+          sanitizationApplied: true
+        });
+      } else {
+        debugConsole.logProviderError(providerId, providerName, {
+          error: connectionResult.error,
+          provider_type: provider.provider_type,
+          latency: `${latency}ms`,
+          sanitizationApplied: true
+        }, 'CONNECTION_TEST');
+      }
+
+      return {
+        success: connectionResult.success,
+        latency,
         error: connectionResult.error,
-        provider_type: provider.provider_type,
-        latency: `${latency}ms`
-      }, 'CONNECTION_TEST');
+        details: connectionResult.details
+      };
+
+    } catch (connectionError: any) {
+      clearTimeout(timeoutId);
+      throw connectionError;
     }
 
-    return {
-      success: connectionResult.success,
-      latency,
-      error: connectionResult.error,
-      details: connectionResult.details
-    };
-
   } catch (error: any) {
-    clearTimeout(timeoutId);
     const latency = Date.now() - startTime;
     
-    debugConsole.logProviderError(providerId, providerName, error, 'CONNECTION_TEST');
+    // Enhanced error classification and messaging
+    let errorMessage = error.message || 'Unknown error occurred';
+    let errorContext = 'VALIDATION_ERROR';
+    
+    if (error.name === 'AbortError') {
+      errorMessage = 'Connection test timed out after 15 seconds';
+      errorContext = 'TIMEOUT_ERROR';
+    } else if (error.message?.includes('fetch')) {
+      errorMessage = `Network error during connection test: ${error.message}`;
+      errorContext = 'NETWORK_ERROR';
+    } else if (error.message?.includes('Invalid value')) {
+      errorMessage = 'Invalid request parameters detected - API key or headers contain illegal characters';
+      errorContext = 'PARAMETER_ERROR';
+    } else if (error.message?.includes('API key')) {
+      errorMessage = `API key validation error: ${error.message}`;
+      errorContext = 'API_KEY_ERROR';
+    }
+    
+    debugConsole.logProviderError(providerId, providerName, {
+      originalError: error.message,
+      classifiedError: errorMessage,
+      errorType: error.constructor?.name,
+      context: errorContext,
+      preventionApplied: true
+    }, 'CONNECTION_TEST');
 
     return {
       success: false,
       latency,
-      error: error.message || 'Unknown error occurred',
-      details: error
+      error: errorMessage,
+      details: {
+        originalError: error.message,
+        errorType: error.constructor?.name,
+        context: errorContext,
+        troubleshooting: 'Check API key format and endpoint URL validity'
+      }
     };
   }
 };
@@ -416,7 +556,7 @@ async function testGoogleGeminiConnection(
   }
 }
 
-// Grok/X.AI connection test (existing logic)
+// Grok/X.AI connection test - comprehensive enhanced version
 async function testGrokConnection(
   provider: any,
   apiKey: string,
@@ -429,83 +569,325 @@ async function testGrokConnection(
   try {
     debugConsole.logProviderTest(providerId, providerName, 'GROK_TEST', 'Testing Grok connection', {
       baseUrl,
-      method: 'Bearer token authentication'
+      method: 'Bearer token authentication',
+      apiKeyLength: apiKey?.length,
+      apiKeyPrefix: apiKey?.substring(0, 4)
     });
 
-    // First, try to get available models to use for testing
-    let availableModel = 'grok-beta'; // Safe fallback model
+    // Enhanced API key validation for Grok
+    if (!apiKey || typeof apiKey !== 'string') {
+      throw new Error('Grok API key is missing or invalid - must be a valid string');
+    }
+    
+    if (apiKey.length < 20) {
+      throw new Error('Invalid Grok API key format - key appears too short (minimum 20 characters)');
+    }
+    
+    // Expected formats: xai-* (newer) or 129-character legacy keys
+    if (!apiKey.startsWith('xai-') && apiKey.length !== 129) {
+      debugConsole.logProviderTest(providerId, providerName, 'GROK_WARNING', 'API key format unusual', {
+        keyLength: apiKey.length,
+        expectedFormat: 'xai-* or 129 characters',
+        actualFormat: `${apiKey.substring(0, 4)}... (${apiKey.length} chars)`,
+        recommendation: 'Verify key format at console.x.ai'
+      });
+    }
+
+    // Phase 1: Discover available models for better test selection
+    let availableModel = 'grok-beta'; // Conservative fallback
+    let availableModels: string[] = [];
+    let modelsEndpointWorking = false;
     
     try {
+      debugConsole.logProviderTest(providerId, providerName, 'GROK_MODELS', 'Fetching available models for optimal testing', {
+        endpoint: `${baseUrl}/models`,
+        purpose: 'Model discovery and validation'
+      });
+      
+      // Validate headers before fetch call to prevent "Invalid value" errors
+      const { validateHttpHeaders } = await import('@/utils/encryption');
+      const proposedHeaders = {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'User-Agent': 'YachtSentinel-AI/1.0'
+      };
+      
+      const headerValidation = validateHttpHeaders(proposedHeaders);
+      if (!headerValidation.valid) {
+        throw new Error(`Invalid headers detected: ${headerValidation.errors.join(', ')}`);
+      }
+      
       const modelsResponse = await fetch(`${baseUrl}/models`, {
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
+        method: 'GET',
+        headers: headerValidation.sanitized,
         signal: controller.signal
+      });
+      
+      debugConsole.logProviderTest(providerId, providerName, 'GROK_MODELS_RESPONSE', 'Models endpoint response received', {
+        status: modelsResponse.status,
+        statusText: modelsResponse.statusText,
+        ok: modelsResponse.ok,
+        contentType: modelsResponse.headers.get('content-type')
       });
       
       if (modelsResponse.ok) {
         const modelsData = await modelsResponse.json();
-        const availableModels = modelsData.data
-          ?.filter((model: any) => model.object === 'model')
-          ?.map((model: any) => model.id) || [];
         
-        const preferredModels = ['grok-beta', 'grok-2-mini', 'grok-2-latest'];
-        const testModel = preferredModels.find(model => availableModels.includes(model)) || availableModels[0];
+        if (modelsData.data && Array.isArray(modelsData.data)) {
+          availableModels = modelsData.data
+            .filter((model: any) => model.object === 'model' && model.id)
+            .map((model: any) => model.id)
+            .filter(Boolean);
+          
+          modelsEndpointWorking = true;
+          
+          debugConsole.logProviderTest(providerId, providerName, 'GROK_MODELS_SUCCESS', 'Model discovery successful', {
+            totalModels: availableModels.length,
+            models: availableModels,
+            dataStructure: 'OpenAI-compatible format'
+          });
+          
+          // Intelligent model selection for testing
+          const preferredModels = [
+            'grok-beta',           // Most stable
+            'grok-2-mini',         // Fast and efficient
+            'grok-2-1212',         // Latest version
+            'grok-2-latest',       // Latest available
+            'grok-2',              // Standard version
+            'grok-code-fast-1'     // Code-specific
+          ];
+          
+          const testModel = preferredModels.find(model => availableModels.includes(model)) || availableModels[0];
+          
+          if (testModel) {
+            availableModel = testModel;
+            debugConsole.logProviderTest(providerId, providerName, 'GROK_MODEL_SELECTED', 'Optimal model selected for testing', {
+              selectedModel: testModel,
+              selectionReason: preferredModels.includes(testModel) ? 'preferred_model' : 'first_available',
+              allAvailable: availableModels
+            });
+          } else {
+            debugConsole.logProviderTest(providerId, providerName, 'GROK_MODEL_FALLBACK', 'Using fallback model', {
+              fallbackModel: availableModel,
+              reason: 'No models found in response'
+            });
+          }
+        } else {
+          debugConsole.logProviderTest(providerId, providerName, 'GROK_MODELS_FORMAT_ERROR', 'Unexpected models response format', {
+            hasData: !!modelsData.data,
+            dataType: typeof modelsData.data,
+            isArray: Array.isArray(modelsData.data),
+            responseKeys: Object.keys(modelsData)
+          });
+        }
+      } else {
+        const errorText = await modelsResponse.text();
+        let errorDetails: any = { status: modelsResponse.status, rawError: errorText };
         
-        if (testModel) {
-          availableModel = testModel;
+        try {
+          const errorObj = JSON.parse(errorText);
+          errorDetails.parsedError = errorObj;
+        } catch {
+          errorDetails.parseError = 'Not JSON format';
+        }
+        
+        debugConsole.logProviderTest(providerId, providerName, 'GROK_MODELS_ERROR', 'Models endpoint failed', errorDetails);
+        
+        // Handle specific error cases
+        if (modelsResponse.status === 401) {
+          throw new Error('Grok API authentication failed - invalid API key. Please verify your key at console.x.ai');
+        } else if (modelsResponse.status === 403) {
+          throw new Error('Grok API access forbidden - check API key permissions and billing status at console.x.ai');
+        } else if (modelsResponse.status >= 500) {
+          debugConsole.logProviderTest(providerId, providerName, 'GROK_SERVER_ERROR', 'Server error - will attempt chat test anyway', {
+            status: modelsResponse.status,
+            fallbackModel: availableModel
+          });
+          // Don't throw here - server errors on models endpoint might not affect chat
+        } else {
+          throw new Error(`Grok API error (${modelsResponse.status}): ${errorText}`);
         }
       }
-    } catch (modelError) {
-      // Use fallback model if discovery fails
+    } catch (modelError: any) {
+      if (modelError.name === 'AbortError') {
+        throw new Error('Grok API request timed out - check network connection and endpoint URL');
+      }
+      
+      debugConsole.logProviderTest(providerId, providerName, 'GROK_MODELS_EXCEPTION', 'Model discovery encountered exception', {
+        error: modelError.message,
+        errorType: modelError.constructor?.name,
+        fallbackModel: availableModel,
+        willContinueWithChatTest: true
+      });
+      
+      // Only re-throw authentication/permission errors
+      if (modelError.message.includes('authentication') || 
+          modelError.message.includes('forbidden') ||
+          modelError.message.includes('API key')) {
+        throw modelError;
+      }
+      
+      // For other errors, continue with chat test using fallback model
     }
     
-    // Test with a simple chat completion
+    // Phase 2: Test chat completions with selected model
     const testEndpoint = `${baseUrl}/chat/completions`;
     const testPayload = {
       messages: [
-        { role: 'system', content: 'You are a test assistant.' },
-        { role: 'user', content: 'Testing. Just say hi and hello world and nothing else.' }
+        { role: 'system', content: 'You are a helpful test assistant. Respond concisely.' },
+        { role: 'user', content: 'Say "Connection test successful" and nothing else.' }
       ],
       model: availableModel,
       stream: false,
-      temperature: 0,
+      temperature: 0.1,
       max_tokens: 10
     };
 
+    debugConsole.logProviderTest(providerId, providerName, 'GROK_CHAT_TEST', 'Testing chat completions endpoint', {
+      endpoint: testEndpoint,
+      model: availableModel,
+      payloadSize: JSON.stringify(testPayload).length,
+      hasModelsList: modelsEndpointWorking
+    });
+
+    const chatStartTime = Date.now();
+    
+    // Validate headers for chat completions request
+    const chatHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'User-Agent': 'YachtSentinel-AI/1.0'
+    };
+    
+    const { validateHttpHeaders } = await import('@/utils/encryption');
+    const chatHeaderValidation = validateHttpHeaders(chatHeaders);
+    if (!chatHeaderValidation.valid) {
+      throw new Error(`Invalid chat headers detected: ${chatHeaderValidation.errors.join(', ')}`);
+    }
+    
     const response = await fetch(testEndpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'User-Agent': 'YachtSentinel-AI/1.0'
-      },
+      headers: chatHeaderValidation.sanitized,
       body: JSON.stringify(testPayload),
       signal: controller.signal
+    });
+    
+    const chatLatency = Date.now() - chatStartTime;
+
+    debugConsole.logProviderTest(providerId, providerName, 'GROK_CHAT_RESPONSE', 'Chat completions response received', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      latency: `${chatLatency}ms`,
+      contentType: response.headers.get('content-type')
     });
 
     if (!response.ok) {
       const errorText = await response.text();
+      let errorObj: any;
       
-      // Enhanced handling for X.AI API permission errors
-      if (response.status === 403) {
-        throw new Error(`X.AI API Key Permission Error: Your API key cannot access the '${availableModel}' model. Please visit console.x.ai to update your API key permissions.`);
+      try {
+        errorObj = JSON.parse(errorText);
+      } catch {
+        errorObj = { message: errorText, raw: true };
       }
       
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
+      debugConsole.logProviderTest(providerId, providerName, 'GROK_CHAT_ERROR', 'Chat completions failed', {
+        status: response.status,
+        errorObj,
+        testedModel: availableModel,
+        availableModels
+      });
+      
+      // Enhanced error handling with actionable suggestions
+      if (response.status === 403) {
+        const suggestion = availableModels.length > 0 
+          ? `Try using one of these available models: ${availableModels.join(', ')}`
+          : 'Visit console.x.ai to check your API key model permissions and billing status';
+        throw new Error(`Grok API Permission Error: Cannot access model '${availableModel}'. ${suggestion}`);
+      } else if (response.status === 401) {
+        throw new Error('Grok API authentication failed - check your API key at console.x.ai');
+      } else if (response.status === 429) {
+        throw new Error('Grok API rate limit exceeded - please try again later or upgrade your plan');
+      } else if (response.status >= 500) {
+        throw new Error(`Grok API server error (${response.status}) - service may be temporarily unavailable`);
+      } else if (response.status === 400) {
+        const badRequestMsg = errorObj.error?.message || errorObj.message || 'Bad request';
+        throw new Error(`Grok API bad request (${response.status}): ${badRequestMsg}`);
+      } else {
+        throw new Error(`Grok API error (${response.status}): ${errorObj.error?.message || errorObj.message || errorText}`);
+      }
     }
 
     const responseData = await response.json();
     
+    // Validate response structure according to OpenAI format
+    if (!responseData.choices || !Array.isArray(responseData.choices) || responseData.choices.length === 0) {
+      debugConsole.logProviderTest(providerId, providerName, 'GROK_RESPONSE_INVALID', 'Invalid response structure', {
+        hasChoices: !!responseData.choices,
+        choicesType: typeof responseData.choices,
+        choicesLength: Array.isArray(responseData.choices) ? responseData.choices.length : 'N/A',
+        responseKeys: Object.keys(responseData)
+      });
+      throw new Error('Invalid Grok API response format - missing or empty choices array');
+    }
+    
+    const firstChoice = responseData.choices[0];
+    if (!firstChoice.message) {
+      throw new Error('Invalid Grok API response format - missing message in first choice');
+    }
+    
+    debugConsole.logProviderTest(providerId, providerName, 'GROK_SUCCESS', 'Grok connection test completed successfully', {
+      model: availableModel,
+      latency: `${chatLatency}ms`,
+      usage: responseData.usage,
+      responseId: responseData.id,
+      finishReason: firstChoice.finish_reason,
+      messageContent: firstChoice.message.content?.substring(0, 50) + '...',
+      modelsDiscovered: availableModels.length,
+      testSummary: {
+        modelsEndpointWorking,
+        chatEndpointWorking: true,
+        totalLatency: chatLatency,
+        modelUsed: availableModel
+      }
+    });
+    
     return {
       success: true,
-      details: responseData
+      details: {
+        ...responseData,
+        availableModels,
+        testedModel: availableModel,
+        modelsEndpointWorking,
+        latency: chatLatency,
+        testMetrics: {
+          totalModelsAvailable: availableModels.length,
+          endpointsWorking: {
+            models: modelsEndpointWorking,
+            chat: true
+          }
+        }
+      }
     };
   } catch (error: any) {
+    debugConsole.logProviderTest(providerId, providerName, 'GROK_ERROR', 'Grok connection test failed', {
+      error: error.message,
+      errorType: error.constructor?.name,
+      isAbortError: error.name === 'AbortError',
+      isTimeoutError: error.message?.includes('timeout'),
+      isNetworkError: error.message?.includes('fetch') || error.message?.includes('network'),
+      troubleshooting: {
+        checkApiKey: 'Verify API key at console.x.ai',
+        checkEndpoint: 'Ensure endpoint is https://api.x.ai/v1',
+        checkBilling: 'Verify billing status and usage limits',
+        checkModels: 'Check model availability and permissions'
+      }
+    });
+    
     return {
       success: false,
-      error: error.message
+      error: error.message || 'Unknown Grok connection error'
     };
   }
 }

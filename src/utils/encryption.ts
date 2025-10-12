@@ -74,12 +74,22 @@ const getEncryptionKey = async (): Promise<CryptoKey> => {
  * Encrypt API key or sensitive data
  */
 export const encryptApiKey = async (plaintext: string): Promise<string> => {
-  if (!plaintext) return '';
+  if (!plaintext) {
+    console.warn('⚠️ encryptApiKey: Empty plaintext provided');
+    return '';
+  }
+  
+  console.log('🔐 encryptApiKey: Starting encryption', {
+    plaintextLength: plaintext.length,
+    plaintextPrefix: plaintext.substring(0, 4),
+    webCryptoAvailable: !!(crypto && crypto.subtle && crypto.subtle.encrypt),
+    algorithmSupported: ALGORITHM
+  });
   
   try {
     // Check if Web Crypto API is available
     if (!crypto || !crypto.subtle || !crypto.subtle.encrypt) {
-      console.warn('⚠️ Web Crypto API not available - using plain text storage with prefix');
+      console.warn('⚠️ encryptApiKey: Web Crypto API not available - using plain text storage with prefix');
       return `PLAIN:${plaintext}`;
     }
     
@@ -89,6 +99,12 @@ export const encryptApiKey = async (plaintext: string): Promise<string> => {
     
     // Generate random IV
     const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+    
+    console.log('🔐 encryptApiKey: Encryption parameters ready', {
+      dataLength: data.length,
+      ivLength: iv.length,
+      keyGenerated: !!key
+    });
     
     // Encrypt the data
     const encrypted = await crypto.subtle.encrypt(
@@ -106,9 +122,25 @@ export const encryptApiKey = async (plaintext: string): Promise<string> => {
     combined.set(new Uint8Array(encrypted), iv.length);
     
     // Convert to base64 for storage
-    return btoa(String.fromCharCode(...combined));
-  } catch (error) {
-    console.error('Encryption failed:', error);
+    const base64Result = btoa(String.fromCharCode(...combined));
+    
+    console.log('✅ encryptApiKey: Encryption successful', {
+      originalLength: plaintext.length,
+      encryptedLength: base64Result.length,
+      base64Preview: base64Result.substring(0, 20) + '...',
+      ivLength: iv.length,
+      encryptedDataLength: encrypted.byteLength
+    });
+    
+    return base64Result;
+  } catch (error: any) {
+    console.error('❌ encryptApiKey: Encryption failed:', {
+      error: error.message,
+      errorType: error.constructor?.name,
+      plaintextLength: plaintext.length,
+      fallbackAction: 'Using PLAIN: prefix'
+    });
+    
     // In development, return the plain key with a warning
     console.warn('⚠️ API key not encrypted - using plain text for development');
     return `PLAIN:${plaintext}`;
@@ -341,18 +373,48 @@ export const getProviderApiKey = async (provider: any): Promise<string> => {
  * Attempts encryption but falls back to PLAIN: prefix if needed
  */
 export const storeProviderApiKey = async (apiKey: string): Promise<string> => {
-  if (!apiKey) return '';
+  if (!apiKey) {
+    console.warn('⚠️ storeProviderApiKey: Empty API key provided');
+    return '';
+  }
+  
+  console.log('🔐 storeProviderApiKey: Starting encryption process', {
+    keyLength: apiKey.length,
+    keyPrefix: apiKey.substring(0, 4),
+    cryptoApiAvailable: !!(crypto && crypto.subtle),
+    environment: typeof window !== 'undefined' ? 'browser' : 'server'
+  });
   
   try {
     const encrypted = await encryptApiKey(apiKey);
+    
+    console.log('✅ storeProviderApiKey: Encryption process completed', {
+      originalLength: apiKey.length,
+      encryptedLength: encrypted?.length,
+      encryptionSuccessful: encrypted && !encrypted.startsWith('PLAIN:'),
+      resultType: encrypted?.startsWith('PLAIN:') ? 'fallback_plain' : 'encrypted',
+      encryptedPrefix: encrypted?.substring(0, 10) + '...' || 'N/A'
+    });
+    
     // If encryption succeeded and we didn't get a PLAIN: prefix, return encrypted
     if (encrypted && !encrypted.startsWith('PLAIN:')) {
       return encrypted;
     }
-    // Otherwise use PLAIN: prefix for secure identification
+    
+    // If we got a PLAIN: prefix from encryptApiKey, return it as-is
+    if (encrypted && encrypted.startsWith('PLAIN:')) {
+      return encrypted;
+    }
+    
+    // Fallback: use PLAIN: prefix for secure identification
+    console.warn('⚠️ storeProviderApiKey: Using fallback PLAIN: prefix');
     return `PLAIN:${apiKey}`;
-  } catch (error) {
-    console.warn('⚠️ Encryption failed, storing with PLAIN: prefix:', error.message);
+  } catch (error: any) {
+    console.error('❌ storeProviderApiKey: Encryption failed, using PLAIN: prefix:', {
+      error: error.message,
+      errorType: error.constructor?.name,
+      apiKeyLength: apiKey.length
+    });
     return `PLAIN:${apiKey}`;
   }
 };
@@ -370,3 +432,270 @@ export interface ApiKeyValidation {
   format: string;
   masked: string;
 }
+
+/**
+ * SYSTEMATIC SOLUTION: Provider-aware API key validation
+ * Handles current, legacy, and future API key formats with extensible patterns
+ */
+export const validateApiKeyByProvider = (apiKey: string, providerType?: string): { isValid: boolean; format: string; error?: string } => {
+  if (!apiKey || typeof apiKey !== 'string') {
+    return { isValid: false, format: 'invalid', error: 'API key must be a non-empty string' };
+  }
+
+  const cleaned = apiKey.trim();
+  const type = providerType?.toLowerCase();
+  
+  // Provider-specific validation with comprehensive pattern support
+  switch (type) {
+    case 'grok':
+    case 'xai':
+      // Grok supports both modern (xai-) and legacy (129-char) formats
+      if (/^xai-[a-zA-Z0-9_-]+$/.test(cleaned)) {
+        return { isValid: true, format: 'grok_modern' };
+      }
+      if (/^[a-zA-Z0-9]{129}$/.test(cleaned)) {
+        return { isValid: true, format: 'grok_legacy' };
+      }
+      // Allow any reasonable length for Grok variations
+      if (/^[a-zA-Z0-9_-]{20,}$/.test(cleaned)) {
+        return { isValid: true, format: 'grok_variant' };
+      }
+      return { 
+        isValid: false, 
+        format: 'grok_invalid', 
+        error: 'Grok API key must start with "xai-", be exactly 129 alphanumeric characters, or match standard format' 
+      };
+      
+    case 'openai':
+      if (/^sk-[a-zA-Z0-9_-]+$/.test(cleaned)) {
+        return { isValid: true, format: 'openai_standard' };
+      }
+      return { isValid: false, format: 'openai_invalid', error: 'OpenAI API key must start with "sk-"' };
+      
+    case 'google':
+    case 'vertex':
+      if (/^AIza[a-zA-Z0-9_-]+$/.test(cleaned)) {
+        return { isValid: true, format: 'google_standard' };
+      }
+      return { isValid: false, format: 'google_invalid', error: 'Google API key must start with "AIza"' };
+      
+    case 'anthropic':
+      if (/^sk-ant-[a-zA-Z0-9_-]+$/.test(cleaned)) {
+        return { isValid: true, format: 'anthropic_standard' };
+      }
+      return { isValid: false, format: 'anthropic_invalid', error: 'Anthropic API key must start with "sk-ant-"' };
+      
+    default:
+      // FUTURE-PROOF: Generic validation for unknown providers
+      // This ensures new providers will work without code changes
+      const patterns = [
+        { pattern: /^xai-[a-zA-Z0-9_-]+$/, format: 'grok_modern' },
+        { pattern: /^[a-zA-Z0-9]{129}$/, format: 'grok_legacy' },
+        { pattern: /^sk-[a-zA-Z0-9_-]+$/, format: 'openai_standard' },
+        { pattern: /^AIza[a-zA-Z0-9_-]+$/, format: 'google_standard' },
+        { pattern: /^sk-ant-[a-zA-Z0-9_-]+$/, format: 'anthropic_standard' },
+        { pattern: /^[a-zA-Z0-9_-]{20,}$/, format: 'generic_valid' }
+      ];
+      
+      for (const { pattern, format } of patterns) {
+        if (pattern.test(cleaned)) {
+          return { isValid: true, format };
+        }
+      }
+      
+      return { 
+        isValid: false, 
+        format: 'unknown_format', 
+        error: 'API key format not recognized - ensure it matches your provider\'s expected format'
+      };
+  }
+};
+
+/**
+ * SYSTEMATIC FIX: Sanitize API key for HTTP headers with provider awareness
+ * Prevents "Failed to execute 'fetch' on 'Window': Invalid value" errors
+ * Removes control characters, null bytes, and validates format
+ */
+export const sanitizeApiKeyForHeaders = (apiKey: string, providerType?: string): { sanitized: string; isValid: boolean; error?: string } => {
+  console.log('🧹 sanitizeApiKeyForHeaders: Starting sanitization', {
+    hasApiKey: !!apiKey,
+    apiKeyType: typeof apiKey,
+    apiKeyLength: apiKey?.length,
+    apiKeyPrefix: apiKey?.substring(0, 4),
+    providerType: providerType || 'unknown'
+  });
+  
+  if (!apiKey || typeof apiKey !== 'string') {
+    return {
+      sanitized: '',
+      isValid: false,
+      error: 'API key is null, undefined, or not a string'
+    };
+  }
+
+  // Remove control characters (\x00-\x1F), null bytes, line breaks, tabs
+  // These characters can cause "Invalid value" errors in fetch headers
+  const cleaned = apiKey
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
+    .replace(/[\r\n\t]/g, '') // Remove line breaks and tabs
+    .replace(/\u0000/g, '') // Remove null bytes
+    .trim(); // Remove leading/trailing whitespace
+
+  console.log('🧹 sanitizeApiKeyForHeaders: Cleaning completed', {
+    originalLength: apiKey.length,
+    cleanedLength: cleaned.length,
+    removedCharacters: apiKey.length - cleaned.length,
+    cleanedPrefix: cleaned.substring(0, 4)
+  });
+
+  if (!cleaned) {
+    return {
+      sanitized: '',
+      isValid: false,
+      error: 'API key contains only invalid characters'
+    };
+  }
+
+  // Validate length (minimum 10 characters for any API key)
+  if (cleaned.length < 10) {
+    return {
+      sanitized: cleaned,
+      isValid: false,
+      error: `API key is too short (${cleaned.length} chars, minimum 10 required)`
+    };
+  }
+
+  // SYSTEMATIC VALIDATION: Provider-aware pattern matching
+  const validation = validateApiKeyByProvider(cleaned, providerType);
+  
+  console.log('✅ sanitizeApiKeyForHeaders: Validation completed', {
+    isValid: validation.isValid,
+    format: validation.format,
+    finalLength: cleaned.length,
+    providerType: providerType || 'generic',
+    error: validation.error
+  });
+  
+  return {
+    sanitized: cleaned,
+    isValid: validation.isValid,
+    error: validation.error
+  };
+};
+
+/**
+ * Validate HTTP headers to prevent fetch "Invalid value" errors
+ * Ensures all header values are safe for HTTP requests
+ */
+export const validateHttpHeaders = (headers: Record<string, string>): { valid: boolean; sanitized: Record<string, string>; errors: string[] } => {
+  const sanitized: Record<string, string> = {};
+  const errors: string[] = [];
+  
+  console.log('🔍 validateHttpHeaders: Starting header validation', {
+    headerCount: Object.keys(headers).length,
+    headerNames: Object.keys(headers)
+  });
+  
+  for (const [key, value] of Object.entries(headers)) {
+    // Validate header name
+    if (!key || typeof key !== 'string' || !/^[a-zA-Z0-9-]+$/.test(key)) {
+      errors.push(`Invalid header name: "${key}"`);
+      continue;
+    }
+    
+    // Validate header value
+    if (value === null || value === undefined) {
+      errors.push(`Header "${key}" has null/undefined value`);
+      continue;
+    }
+    
+    if (typeof value !== 'string') {
+      errors.push(`Header "${key}" value is not a string: ${typeof value}`);
+      continue;
+    }
+    
+    // Remove control characters from header values
+    const cleanValue = value
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      .replace(/[\r\n]/g, '')
+      .trim();
+    
+    if (!cleanValue && key.toLowerCase() !== 'content-length') {
+      errors.push(`Header "${key}" is empty after sanitization`);
+      continue;
+    }
+    
+    sanitized[key] = cleanValue;
+  }
+  
+  console.log('✅ validateHttpHeaders: Validation completed', {
+    originalHeaders: Object.keys(headers).length,
+    validHeaders: Object.keys(sanitized).length,
+    errorCount: errors.length,
+    errors: errors.length > 0 ? errors : 'none'
+  });
+  
+  return {
+    valid: errors.length === 0,
+    sanitized,
+    errors
+  };
+};
+
+/**
+ * Enhanced getProviderApiKey with comprehensive sanitization
+ * This is the SAFE version that should be used for HTTP requests
+ * Follows memory guidance on API key retrieval priority and sanitization
+ */
+export const getProviderApiKeySafe = async (provider: any): Promise<{ apiKey: string; isValid: boolean; error?: string }> => {
+  console.log('🔐 getProviderApiKeySafe: Starting safe API key retrieval', {
+    providerId: provider?.id,
+    providerType: provider?.provider_type,
+    hasProvider: !!provider
+  });
+  
+  try {
+    // Use existing getProviderApiKey function (follows memory guidance on priority)
+    const rawApiKey = await getProviderApiKey(provider);
+    
+    if (!rawApiKey) {
+      return {
+        apiKey: '',
+        isValid: false,
+        error: 'No API key found in provider configuration (checked: configuration.api_key, config.api_key, provider.api_key)'
+      };
+    }
+
+    // Apply provider-aware sanitization to prevent fetch errors
+    const sanitizationResult = sanitizeApiKeyForHeaders(rawApiKey, provider?.provider_type);
+    
+    console.log('🔐 getProviderApiKeySafe: Process completed', {
+      originalLength: rawApiKey.length,
+      sanitizedLength: sanitizationResult.sanitized.length,
+      isValid: sanitizationResult.isValid,
+      format: (sanitizationResult as any).format || 'detected_via_validation',
+      error: sanitizationResult.error,
+      providerId: provider?.id,
+      providerType: provider?.provider_type
+    });
+
+    return {
+      apiKey: sanitizationResult.sanitized,
+      isValid: sanitizationResult.isValid,
+      error: sanitizationResult.error
+    };
+  } catch (error: any) {
+    console.error('❌ getProviderApiKeySafe failed:', {
+      error: error.message,
+      errorType: error.constructor?.name,
+      providerId: provider?.id,
+      providerType: provider?.provider_type
+    });
+    
+    return {
+      apiKey: '',
+      isValid: false,
+      error: error.message || 'Failed to get and sanitize API key'
+    };
+  }
+};

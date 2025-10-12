@@ -1,0 +1,4 @@
+id,key,value,description,category,is_public,created_at,updated_at
+e6ff8041-ef4c-4fcd-a653-d1afd0b6c927,system.maintenance,false,System maintenance mode flag,system,f,2025-10-12 11:37:09.241791+00,2025-10-12 11:37:09.241791+00
+24ca9566-77cc-42ed-a010-7fd84e704bea,system.registration,true,User registration enabled flag,system,f,2025-10-12 11:37:09.241791+00,2025-10-12 11:37:09.241791+00
+0e9588b8-2e66-4d23-8492-4976a79da714,system.maxFileSize,10485760,Maximum file upload size in bytes (10MB),system,f,2025-10-12 11:37:09.241791+00,2025-10-12 11:37:09.241791+00

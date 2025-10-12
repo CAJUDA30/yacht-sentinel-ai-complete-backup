@@ -1,5 +1,5 @@
                                                                                                                      ?column?                                                                                                                     
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+LEGACY_API_KEY_REDACTED_FOR_GITHUB_SECURITY-----------------------------------------------------------------------------------------------------------------
  -- Table: public.ai_health                                                                                                                                                                                                                      +
  ALTER TABLE public.ai_health ENABLE ROW LEVEL SECURITY;                                                                                                                                                                                         +
  CREATE POLICY "service_role_full_access" ON public.ai_health FOR ALL TO service_role                                                                                                                                                            +

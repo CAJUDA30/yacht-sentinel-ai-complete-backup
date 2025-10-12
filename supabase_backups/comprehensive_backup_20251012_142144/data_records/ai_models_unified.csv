@@ -1,0 +1,4 @@
+id,created_at,updated_at,name,display_name,provider_id,model_type,is_active,max_tokens,input_cost_per_token,output_cost_per_token,config,capabilities,priority,description
+ba656f0d-6f40-4a0f-add5-b9fcd8f419cc,2025-10-12 11:37:09.295508+00,2025-10-12 11:37:09.295508+00,gpt-4o,GPT-4o (Latest),044b4f5e-5a82-47cb-aac9-740950354f64,text,t,128000,,,{},{},1,OpenAI GPT-4o - Latest multimodal model
+9764a5c0-9089-45c3-b650-11c58f2735fc,2025-10-12 11:37:09.295508+00,2025-10-12 11:37:09.295508+00,gemini-1.5-pro-002,Gemini 1.5 Pro,9669c895-235f-4d20-ad96-5a36f05332f9,text,t,2097152,,,{},{},1,Google Gemini 1.5 Pro - Large context window
+d862d82a-bd01-4409-ad8f-2b25560bee2c,2025-10-12 11:37:09.295508+00,2025-10-12 11:37:09.295508+00,deepseek-chat,DeepSeek Chat,c21e18d4-0e66-4c93-9847-7b8abb2307a6,text,t,32768,,,{},{},1,DeepSeek Chat - Efficient reasoning model

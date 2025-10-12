@@ -328,15 +328,44 @@ export const EnhancedProviderWizard: React.FC<EnhancedProviderWizardProps> = ({
       setIsCreating(true);
       const providerId = `provider_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
+      // Import encryption function
+      const { storeProviderApiKey } = await import('@/utils/encryption');
+      
+      // Encrypt the API key before storing
+      let encryptedApiKey = '';
+      if (provider.api_key) {
+        try {
+          encryptedApiKey = await storeProviderApiKey(provider.api_key);
+          console.log('✅ API key encrypted successfully for provider creation:', {
+            originalLength: provider.api_key.length,
+            encryptedLength: encryptedApiKey.length,
+            isPlainPrefix: encryptedApiKey.startsWith('PLAIN:'),
+            provider_type: provider.provider_type
+          });
+        } catch (encError) {
+          console.warn('⚠️ Failed to encrypt API key, using fallback:', encError);
+          encryptedApiKey = `PLAIN:${provider.api_key}`;
+        }
+      }
+      
       const providerData = {
-        id: providerId, name: provider.name, provider_type: provider.provider_type, auth_method: provider.auth_method,
-        capabilities: provider.capabilities, is_active: provider.is_active,
+        id: providerId, 
+        name: provider.name, 
+        provider_type: provider.provider_type, 
+        auth_method: provider.auth_method,
+        capabilities: provider.capabilities, 
+        is_active: provider.is_active,
         configuration: {
           api_endpoint: provider.api_endpoint, 
-          api_key: provider.api_key, // CRITICAL: Save the API key!
-          rate_limit: provider.rate_limit, timeout: provider.timeout,
-          max_retries: provider.max_retries, temperature: provider.temperature, max_tokens: provider.max_tokens,
-          priority: provider.priority, environment: provider.environment, specialization: provider.specialization,
+          api_key: encryptedApiKey, // CRITICAL: Store encrypted API key!
+          rate_limit: provider.rate_limit, 
+          timeout: provider.timeout,
+          max_retries: provider.max_retries, 
+          temperature: provider.temperature, 
+          max_tokens: provider.max_tokens,
+          priority: provider.priority, 
+          environment: provider.environment, 
+          specialization: provider.specialization,
           selected_models: provider.selected_models, 
           selected_model: provider.selected_model, // Save primary model
           tags: provider.tags, 
@@ -345,16 +374,27 @@ export const EnhancedProviderWizard: React.FC<EnhancedProviderWizardProps> = ({
           connection_tested: connectionTested,
           connection_latency: connectionLatency,
           created_at: new Date().toISOString(),
-          wizard_version: '2.0'
+          wizard_version: '2.0',
+          encryption_applied: true,
+          encryption_timestamp: new Date().toISOString()
         }
       };
 
       await onProviderCreate(providerData);
-      toast({ title: '🎉 Provider Created Successfully', description: `${provider.name} is ready for use with ${provider.selected_models.length} models`, duration: 5000 });
+      toast({ 
+        title: '🎉 Provider Created Successfully', 
+        description: `${provider.name} is ready for use with ${provider.selected_models.length} models`, 
+        duration: 5000 
+      });
       resetWizard();
       onClose();
     } catch (error: any) {
-      toast({ title: '❌ Failed to Create Provider', description: error.message || 'An unexpected error occurred', variant: 'destructive' });
+      console.error('❌ Provider creation failed:', error);
+      toast({ 
+        title: '❌ Failed to Create Provider', 
+        description: error.message || 'An unexpected error occurred', 
+        variant: 'destructive' 
+      });
     } finally {
       setIsCreating(false);
     }

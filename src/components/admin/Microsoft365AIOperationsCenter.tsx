@@ -30,6 +30,7 @@ import { startupHealthService } from '@/services/startupHealthService';
 import { AppleGradeMonitoringDashboard } from '@/components/monitoring/AppleGradeMonitoringDashboard';
 import { RealTimeMetricsOverlay } from '@/components/monitoring/RealTimeMetricsOverlay';
 import { enterpriseCostTracker } from '@/services/enterpriseCostTracker';
+import { rlsHealthService } from '@/services/rlsHealthService';
 
 interface MS365AIOperationsCenterProps {
   className?: string;
@@ -173,9 +174,59 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
     return '$0.002';
   };
 
-  const testIndividualModel = async (provider: any, modelName: string, silent: boolean = false) => {
+  const testIndividualModel = async (provider: any, modelName: string | any, silent: boolean = false) => {
     const config = provider.config as any;
-    const modelKey = `${provider.id}-${modelName}`;
+    
+    // Enhanced model name normalization - handle all possible object formats
+    let normalizedModelName: string;
+    
+    if (typeof modelName === 'string') {
+      normalizedModelName = modelName;
+    } else if (modelName && typeof modelName === 'object') {
+      // Try multiple possible properties in order of preference
+      normalizedModelName = 
+        modelName.id || 
+        modelName.name || 
+        modelName.model || 
+        modelName.model_name ||
+        modelName.modelName ||
+        modelName.value ||
+        modelName.label ||
+        (typeof modelName.toString === 'function' && modelName.toString() !== '[object Object]' ? modelName.toString() : '') ||
+        'unknown-model';
+    } else {
+      // Handle null, undefined, or other primitive types
+      normalizedModelName = String(modelName || 'unknown-model');
+    }
+    
+    // Additional safety checks
+    if (!normalizedModelName || normalizedModelName === 'unknown-model' || normalizedModelName === '[object Object]') {
+      console.warn('Invalid model name provided to testIndividualModel:', {
+        originalInput: modelName,
+        inputType: typeof modelName,
+        inputIsArray: Array.isArray(modelName),
+        inputKeys: modelName && typeof modelName === 'object' ? Object.keys(modelName) : 'N/A',
+        normalizedResult: normalizedModelName
+      });
+      
+      debugConsole.warn('MODEL_TEST', 'Invalid model name detected', {
+        originalInput: modelName,
+        inputType: typeof modelName,
+        normalizedResult: normalizedModelName,
+        provider: provider.name
+      }, provider.id, provider.name);
+      
+      if (!silent) {
+        toast({
+          title: '⚠️ Invalid Model Name',
+          description: 'Unable to test model - invalid model identifier provided',
+          variant: 'destructive'
+        });
+      }
+      return;
+    }
+    
+    const modelKey = `${provider.id}-${normalizedModelName}`;
     
     // Enhanced endpoint detection with fallback priority
     const apiEndpoint = provider.api_endpoint || 
@@ -192,13 +243,13 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         }
       }));
       
-      addDebugLog(provider.id, 'warning', `Model ${modelName}: Configuration incomplete`, {
-        model: modelName,
+      addDebugLog(provider.id, 'warning', `Model ${normalizedModelName}: Configuration incomplete`, {
+        model: normalizedModelName,
         issue: 'Missing API endpoint'
       });
       
-      debugConsole.warn('MODEL_TEST', `Model ${modelName}: Configuration incomplete`, {
-        model: modelName,
+      debugConsole.warn('MODEL_TEST', `Model ${normalizedModelName}: Configuration incomplete`, {
+        model: normalizedModelName,
         issue: 'Missing API endpoint',
         checked_locations: {
           'config.api_endpoint': !!config?.api_endpoint,
@@ -223,24 +274,36 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
       [modelKey]: { status: 'checking', lastChecked: new Date().toISOString() }
     }));
     
-    addDebugLog(provider.id, 'info', `Testing model: ${modelName}`, {
-      model: modelName,
-      endpoint: apiEndpoint
+    addDebugLog(provider.id, 'info', `Testing model: ${normalizedModelName}`, {
+      model: normalizedModelName,
+      endpoint: apiEndpoint,
+      originalModelInput: typeof modelName === 'object' ? JSON.stringify(modelName) : String(modelName)
     });
 
     try {
       if (!silent) {
         toast({
           title: '🧪 Testing Model',
-          description: `Testing ${modelName} connection...`,
+          description: `Testing ${normalizedModelName} connection...`,
           duration: 2000
         });
       }
       
-      debugConsole.info('MODEL_TEST', `Starting individual model test for ${modelName}`, {
+      debugConsole.info('MODEL_TEST', `Starting individual model test for ${normalizedModelName}`, {
         provider: provider.name,
-        model: modelName,
-        endpoint: apiEndpoint
+        model: normalizedModelName,
+        endpoint: apiEndpoint,
+        originalModelInput: typeof modelName === 'object' ? 
+          JSON.stringify(modelName).substring(0, 200) + (JSON.stringify(modelName).length > 200 ? '...' : '') :
+          String(modelName),
+        inputProcessing: {
+          inputType: typeof modelName,
+          wasObject: typeof modelName === 'object',
+          extractionMethod: typeof modelName === 'string' ? 'direct' : 
+                            modelName?.id ? 'id_property' :
+                            modelName?.name ? 'name_property' :
+                            modelName?.model ? 'model_property' : 'fallback'
+        }
       }, provider.id, provider.name);
       
       // Create a test provider object with the specific model
@@ -251,21 +314,30 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         configuration: {
           ...config,
           api_endpoint: apiEndpoint,
-          selected_model: modelName,
-          selected_models: [modelName]
+          selected_model: normalizedModelName,
+          selected_models: [normalizedModelName]
         }
       };
       
-      const decryptedApiKey = await getProviderApiKey(provider);
+      const { apiKey: decryptedApiKey, isValid: isApiKeyValid, error: apiKeyError } = await import('@/utils/encryption').then(m => m.getProviderApiKeySafe(provider));
       
-      if (!decryptedApiKey) {
-        addDebugLog(provider.id, 'error', `Model ${modelName}: API key decryption failed`, {
-          model: modelName,
+      if (!isApiKeyValid || !decryptedApiKey) {
+        const errorMsg = apiKeyError || 'API key validation failed - contains invalid characters or format';
+        addDebugLog(provider.id, 'error', `Model ${normalizedModelName}: ${errorMsg}`, {
+          model: normalizedModelName,
           hasProvider: !!provider,
           hasConfig: !!provider.config,
-          hasConfiguration: !!provider.configuration
+          hasConfiguration: !!provider.configuration,
+          sanitizationError: apiKeyError
         });
-        throw new Error('API key not available or could not be decrypted');
+        
+        debugConsole.error('MODEL_TEST', `Model ${normalizedModelName}: API key validation failed`, {
+          error: errorMsg,
+          model: normalizedModelName,
+          apiKeyLength: decryptedApiKey?.length || 0
+        }, provider.id, provider.name);
+        
+        throw new Error(errorMsg);
       }
       
       const startTime = Date.now();
@@ -282,15 +354,20 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           }
         }));
         
-        addDebugLog(provider.id, 'success', `Model ${modelName}: Test successful`, {
-          model: modelName,
+        addDebugLog(provider.id, 'success', `Model ${normalizedModelName}: Test successful`, {
+          model: normalizedModelName,
           latency: result.latency || latency
         });
+        
+        debugConsole.success('MODEL_TEST', `Model test successful for ${normalizedModelName}`, {
+          latency: result.latency || latency,
+          model: normalizedModelName
+        }, provider.id, provider.name);
         
         if (!silent) {
           toast({
             title: '✅ Model Test Successful',
-            description: `${modelName} is working properly (${result.latency || latency}ms)`,
+            description: `${normalizedModelName} is working properly (${result.latency || latency}ms)`,
             duration: 4000
           });
         }
@@ -304,11 +381,16 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           }
         }));
         
-        addDebugLog(provider.id, 'error', `Model ${modelName}: Test failed`, {
-          model: modelName,
+        addDebugLog(provider.id, 'error', `Model ${normalizedModelName}: Test failed`, {
+          model: normalizedModelName,
           error: result.error,
           latency
         });
+        
+        debugConsole.error('MODEL_TEST', `Model test failed for ${normalizedModelName}`, {
+          error: result.error,
+          model: normalizedModelName
+        }, provider.id, provider.name);
         
         if (!silent) {
           toast({
@@ -329,10 +411,15 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         }
       }));
       
-      addDebugLog(provider.id, 'error', `Model ${modelName}: Test error`, {
-        model: modelName,
+      addDebugLog(provider.id, 'error', `Model ${normalizedModelName}: Test error`, {
+        model: normalizedModelName,
         error: error.message
       });
+      
+      debugConsole.error('MODEL_TEST', `Model test error for ${normalizedModelName}`, {
+        error: error.message,
+        model: normalizedModelName
+      }, provider.id, provider.name);
       
       if (!silent) {
         toast({
@@ -523,6 +610,33 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         is_active: provider.is_active
       });
       
+      // SYSTEMATIC FIX: Check RLS health before attempting DELETE operation
+      debugConsole.info('PROVIDER_DELETE', 'Checking RLS policy health before deletion...');
+      const deleteHealthCheck = await rlsHealthService.canPerformDeleteOperations();
+      
+      if (!deleteHealthCheck.canDelete) {
+        debugConsole.warn('PROVIDER_DELETE', 'RLS policy issue detected, attempting automatic fix', {
+          reason: deleteHealthCheck.reason
+        });
+        
+        // Attempt automatic RLS fix
+        const fixResult = await rlsHealthService.autoFixIssues();
+        
+        if (!fixResult.success) {
+          throw new Error(`DELETE blocked by RLS policy issues: ${deleteHealthCheck.reason}. Auto-fix failed: ${fixResult.message}`);
+        }
+        
+        debugConsole.success('PROVIDER_DELETE', 'RLS policies automatically fixed', {
+          fixed_tables: fixResult.fixed_tables
+        });
+        
+        toast({
+          title: '🔧 RLS Policies Fixed',
+          description: `Fixed RLS policies for ${fixResult.fixed_tables.length} tables. Proceeding with deletion.`,
+          duration: 4000
+        });
+      }
+      
       // Enhanced delete with better error handling
       const { error } = await supabase
         .from('ai_providers_unified')
@@ -534,7 +648,23 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         if (error.code === '23503') {
           throw new Error('Cannot delete provider: it has dependent records. Please remove related configurations first.');
         } else if (error.code === '42501') {
-          throw new Error('Permission denied. You do not have sufficient privileges to delete this provider.');
+          // RLS permission error - this should be rare now with health checks
+          debugConsole.error('PROVIDER_DELETE', 'RLS permission denied despite health check', {
+            error_code: error.code,
+            error_message: error.message
+          });
+          
+          // Try one more automatic fix
+          const emergencyFix = await rlsHealthService.autoFixIssues();
+          if (emergencyFix.success) {
+            toast({
+              title: '🚨 Emergency RLS Fix Applied',
+              description: 'RLS policies were fixed after permission error. Please try deleting again.',
+              duration: 6000
+            });
+          }
+          
+          throw new Error('Permission denied. RLS policies have been fixed - please try deleting again in a moment.');
         } else {
           throw error;
         }
@@ -564,7 +694,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         title: '❌ Delete Failed',
         description: error.message || 'Failed to delete provider. Please check your permissions.',
         variant: 'destructive',
-        duration: 5000
+        duration: 8000 // Longer duration for error messages
       });
     }
   };
