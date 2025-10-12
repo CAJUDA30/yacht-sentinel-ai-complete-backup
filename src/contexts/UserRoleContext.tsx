@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, ReactNode, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 
@@ -67,7 +67,10 @@ export const UserRoleProvider: React.FC<UserRoleProviderProps> = ({ children }) 
   // Use Master Auth System - no more conflicts!
   const masterAuth = useSupabaseAuth();
 
-  console.log('[UserRoleProvider] ✅ Using Master Auth System - No conflicts!');
+  // Only log once when provider initializes to reduce spam
+  useEffect(() => {
+    console.log('[UserRoleProvider] ✅ Using Master Auth System - No conflicts!');
+  }, []);
 
   const contextValue: UserRoleContextType = {
     user: masterAuth.user,

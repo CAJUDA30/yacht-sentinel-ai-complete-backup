@@ -260,6 +260,8 @@ const EnhancedDocumentAIManager: React.FC = () => {
       toast.error('Failed to update processor status');
     }
   };
+
+  const testProcessor = async (processor: DocumentAIProcessor) => {
     try {
       setTesting(prev => ({ ...prev, [processor.id]: true }));
 
@@ -304,92 +306,6 @@ const EnhancedDocumentAIManager: React.FC = () => {
     }
   };
 
-  const saveProcessor = async () => {
-    try {
-      if (!editForm.name || !editForm.processor_id || !editForm.location) {
-        toast.error('Please fill in all required fields');
-        return;
-      }
-
-      const processorData = {
-        ...editForm,
-        updated_at: new Date().toISOString()
-      };
-
-      let error;
-      if (selectedProcessor) {
-        // Update existing processor
-        const { error: updateError } = await supabase
-          .from('document_ai_processors')
-          .update(processorData)
-          .eq('id', selectedProcessor.id);
-        error = updateError;
-      } else {
-        // Create new processor - use type assertion to bypass TypeScript checks
-        const { error: insertError } = await supabase
-          .from('document_ai_processors')
-          .insert([{
-            ...processorData,
-            id: crypto.randomUUID(),
-            created_at: new Date().toISOString()
-          } as any]);
-        error = insertError;
-      }
-
-      if (error) throw error;
-
-      toast.success(`Processor ${selectedProcessor ? 'updated' : 'created'} successfully`);
-      setEditDialogOpen(false);
-      setSelectedProcessor(null);
-      setEditForm({});
-      loadProcessors();
-    } catch (error) {
-      console.error('Error saving processor:', error);
-      toast.error(`Failed to ${selectedProcessor ? 'update' : 'create'} processor`);
-    }
-  };
-
-  const deleteProcessor = async () => {
-    if (!selectedProcessor) return;
-
-    try {
-      const { error } = await supabase
-        .from('document_ai_processors')
-        .delete()
-        .eq('id', selectedProcessor.id);
-
-      if (error) throw error;
-
-      toast.success(`Processor "${selectedProcessor.display_name}" deleted successfully`);
-      setDeleteDialogOpen(false);
-      setSelectedProcessor(null);
-      loadProcessors();
-    } catch (error) {
-      console.error('Error deleting processor:', error);
-      toast.error('Failed to delete processor');
-    }
-  };
-
-  const toggleProcessorStatus = async (processor: DocumentAIProcessor) => {
-    try {
-      const { error } = await supabase
-        .from('document_ai_processors')
-        .update({
-          is_active: !processor.is_active,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', processor.id);
-
-      if (error) throw error;
-
-      toast.success(`Processor ${!processor.is_active ? 'activated' : 'deactivated'}`);
-      loadProcessors();
-    } catch (error) {
-      console.error('Error toggling processor status:', error);
-      toast.error('Failed to update processor status');
-    }
-  };
-
   const openEditDialog = (processor?: DocumentAIProcessor) => {
     setSelectedProcessor(processor || null);
     setEditForm(processor ? { ...processor } : {
@@ -405,42 +321,6 @@ const EnhancedDocumentAIManager: React.FC = () => {
       configuration: {}
     });
     setEditDialogOpen(true);
-  };
-
-  const getStatusIcon = (processor: DocumentAIProcessor) => {
-    if (!processor.last_test_status) return <AlertCircle className="h-4 w-4 text-gray-400" />;
-    
-    switch (processor.last_test_status) {
-      case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'error':
-        return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'warning':
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
-      default:
-        return <AlertCircle className="h-4 w-4 text-gray-400" />;
-    }
-  };
-
-  const getStatusBadge = (processor: DocumentAIProcessor) => {
-    if (!processor.is_active) {
-      return <Badge variant="secondary">Inactive</Badge>;
-    }
-    
-    if (!processor.last_test_status) {
-      return <Badge variant="outline">Not Tested</Badge>;
-    }
-    
-    switch (processor.last_test_status) {
-      case 'success':
-        return <Badge variant="default" className="bg-green-500">Active</Badge>;
-      case 'error':
-        return <Badge variant="destructive">Error</Badge>;
-      case 'warning':
-        return <Badge variant="secondary" className="bg-yellow-500">Warning</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
   };
 
   if (loading) {

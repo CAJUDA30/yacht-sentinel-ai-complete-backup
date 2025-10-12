@@ -87,9 +87,11 @@ class SystemHealthService {
   private subscribers: ((status: SystemHealthStatus) => void)[] = [];
   private checkInterval: NodeJS.Timeout | null = null;
   private isChecking = false;
+  private periodicChecksEnabled = false; // NEW: Track if periodic checks are enabled
 
   private constructor() {
-    this.startPeriodicChecks();
+    // REMOVED: Don't start periodic checks immediately
+    // this.startPeriodicChecks();
   }
 
   static getInstance(): SystemHealthService {
@@ -97,6 +99,44 @@ class SystemHealthService {
       SystemHealthService.instance = new SystemHealthService();
     }
     return SystemHealthService.instance;
+  }
+
+  /**
+   * Enable periodic health checks - ONLY after authentication
+   */
+  public enablePeriodicChecks(): void {
+    if (this.periodicChecksEnabled) {
+      debugConsole.info('SYSTEM_HEALTH', 'Periodic checks already enabled');
+      return;
+    }
+    
+    debugConsole.info('SYSTEM_HEALTH', '🔐 Authentication confirmed - enabling periodic health checks');
+    this.periodicChecksEnabled = true;
+    this.startPeriodicChecks();
+  }
+
+  /**
+   * Disable periodic health checks - on logout
+   */
+  public disablePeriodicChecks(): void {
+    if (!this.periodicChecksEnabled) {
+      return;
+    }
+    
+    debugConsole.info('SYSTEM_HEALTH', '🔒 Disabling periodic health checks (user logged out)');
+    this.periodicChecksEnabled = false;
+    
+    if (this.checkInterval) {
+      clearInterval(this.checkInterval);
+      this.checkInterval = null;
+    }
+  }
+
+  /**
+   * Check if periodic checks are enabled
+   */
+  public arePeriodicChecksEnabled(): boolean {
+    return this.periodicChecksEnabled;
   }
 
   /**
@@ -705,11 +745,26 @@ class SystemHealthService {
   }
 
   /**
-   * Start periodic health checks with immediate initial check
+   * Start periodic health checks - ONLY when authentication is confirmed
    */
   private startPeriodicChecks(): void {
+    // Only start if explicitly enabled (after authentication)
+    if (!this.periodicChecksEnabled) {
+      debugConsole.info('SYSTEM_HEALTH', '⚠️ Periodic checks not enabled yet (waiting for authentication)');
+      return;
+    }
+    
+    // Clear any existing interval
+    if (this.checkInterval) {
+      clearInterval(this.checkInterval);
+    }
+    
+    debugConsole.info('SYSTEM_HEALTH', '🚀 Starting authenticated periodic health checks');
+    
     // Run immediate health check after a short delay to allow initialization
     setTimeout(() => {
+      if (!this.periodicChecksEnabled) return; // Double-check in case user logged out
+      
       debugConsole.info('SYSTEM_HEALTH', 'Starting initial comprehensive health check...');
       this.performHealthCheck(true).then((status) => {
         debugConsole.success('SYSTEM_HEALTH', 'Initial health check completed', {
@@ -723,6 +778,15 @@ class SystemHealthService {
     
     // Periodic checks every 5 minutes
     this.checkInterval = setInterval(() => {
+      if (!this.periodicChecksEnabled) {
+        // Auto-cleanup if checks were disabled
+        if (this.checkInterval) {
+          clearInterval(this.checkInterval);
+          this.checkInterval = null;
+        }
+        return;
+      }
+      
       debugConsole.info('SYSTEM_HEALTH', 'Running scheduled health check...');
       this.performHealthCheck(true).catch((error) => {
         debugConsole.error('SYSTEM_HEALTH', 'Scheduled health check failed', { error: error.message });

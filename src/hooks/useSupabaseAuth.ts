@@ -46,7 +46,7 @@ let isInitializing = false;
 let initializationPromise: Promise<void> | null = null;
 let initAttempts = 0;
 const MAX_INIT_ATTEMPTS = 3;
-const INIT_TIMEOUT_MS = 5000; // 5 second timeout
+const INIT_TIMEOUT_MS = 15000; // Increased to 15 seconds for slow connections
 
 // MASTER ROLE DETECTION - Unified role system
 const detectUserRoles = async (user: User): Promise<string[]> => {
@@ -106,15 +106,12 @@ const detectUserRoles = async (user: User): Promise<string[]> => {
   return roles;
 };
 
-// MASTER NOTIFICATION SYSTEM - Instant synchronization
+// MASTER NOTIFICATION SYSTEM - Reduced logging for performance
 const notifyAllSubscribers = () => {
-  console.log('[MasterAuth] Notifying', subscribers.size, 'subscribers:', {
-    loading: masterAuthState.loading,
-    isAuthenticated: !!masterAuthState.session,
-    initialized: masterAuthState.initialized,
-    roles: masterAuthState.roles,
-    isSuperAdmin: masterAuthState.isSuperAdmin
-  });
+  // Minimal logging for performance
+  if (subscribers.size > 5) {
+    console.warn('[MasterAuth] Performance warning: high subscriber count:', subscribers.size);
+  }
   
   // Update auth sync service
   authSyncService.updateAuthState({
@@ -189,12 +186,18 @@ const initializeMasterAuth = async (): Promise<void> => {
       let sessionError = null;
       
       try {
-        const result = await Promise.race([sessionPromise, timeoutPromise]);
+        // More patient approach - use Promise.race with longer timeout
+        const result = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]);
         session = result?.data?.session || null;
         sessionError = result?.error || null;
       } catch (timeoutError: any) {
-        console.warn('[MasterAuth] ⚠️ Session fetch timed out after', INIT_TIMEOUT_MS, 'ms');
-        sessionError = timeoutError;
+        console.warn('[MasterAuth] Session fetch timed out after', INIT_TIMEOUT_MS, 'ms, continuing with guest mode');
+        // Don't throw error - continue with null session (guest mode)
+        session = null;
+        sessionError = null;
       }
       
       if (sessionError) {
@@ -339,49 +342,52 @@ export const useSupabaseAuth = () => {
   const [state, setState] = useState(masterAuthState);
   
   const updateState = useCallback((newState: MasterAuthState) => {
-    console.log('[useSupabaseAuth] State update:', {
-      loading: newState.loading,
-      isAuthenticated: !!newState.session,
-      initialized: newState.initialized,
-      roles: newState.roles,
-      isSuperAdmin: newState.isSuperAdmin
-    });
+    // Reduced logging for performance - only log on auth changes
+    const wasAuthenticated = !!state.session;
+    const nowAuthenticated = !!newState.session;
+    if (nowAuthenticated !== wasAuthenticated) {
+      console.log('[useSupabaseAuth] Auth state changed:', {
+        wasAuthenticated,
+        nowAuthenticated,
+        roles: newState.roles
+      });
+    }
     setState(newState);
-  }, []);
+  }, [state.session]);
   
   useEffect(() => {
-    console.log('[useSupabaseAuth] 🚀 MASTER HOOK initialized, subscribers:', subscribers.size);
+    // Reduced logging for performance
+    if (subscribers.size === 0) {
+      console.log('[useSupabaseAuth] 🚀 MASTER HOOK initialized, subscribers:', subscribers.size);
+    }
     
     // Subscribe to updates
     subscribers.add(updateState);
     
     // CRITICAL: Use singleton initialization
     if (!masterAuthState.initialized && !initializationPromise) {
-      console.log('[useSupabaseAuth] Starting singleton initialization...');
       initializeMasterAuth().catch(error => {
         console.error('[useSupabaseAuth] Init failed:', error);
       });
     } else if (initializationPromise) {
-      console.log('[useSupabaseAuth] Init already in progress, waiting for completion...');
+      // Reduced logging - only log once
+      if (subscribers.size === 1) {
+        console.log('[useSupabaseAuth] Init already in progress, waiting for completion...');
+      }
       initializationPromise.then(() => {
         setState(masterAuthState);
       });
     } else {
-      // Use current state immediately
-      console.log('[useSupabaseAuth] Using existing master state:', {
-        hasUser: !!masterAuthState.user,
-        hasSession: !!masterAuthState.session,
-        loading: masterAuthState.loading,
-        initialized: masterAuthState.initialized,
-        roles: masterAuthState.roles,
-        isSuperAdmin: masterAuthState.isSuperAdmin
-      });
+      // Use current state immediately - minimal logging
       setState(masterAuthState);
     }
     
     return () => {
       subscribers.delete(updateState);
-      console.log('[useSupabaseAuth] Unsubscribed, remaining:', subscribers.size);
+      // Only log unsubscribe for monitoring
+      if (subscribers.size % 5 === 0) {
+        console.log('[useSupabaseAuth] Unsubscribed, remaining:', subscribers.size);
+      }
     };
   }, [updateState]);
   

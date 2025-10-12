@@ -31,6 +31,23 @@ echo -e "${BLUE}🛑 Stopping Node processes...${NC}"
 pkill -f "node.*yacht-sentinel" 2>/dev/null || true
 echo -e "${GREEN}✅ Node processes stopped${NC}"
 
+# Stop Docker containers
+echo -e "${BLUE}🐳 Stopping Docker containers...${NC}"
+if command -v docker &> /dev/null; then
+    # Stop all running containers related to yacht-sentinel or supabase
+    docker ps -q --filter "name=yacht-sentinel" | xargs -r docker stop 2>/dev/null || true
+    docker ps -q --filter "name=supabase" | xargs -r docker stop 2>/dev/null || true
+    
+    # Stop any containers using our common ports
+    docker ps -q --filter "publish=5174" | xargs -r docker stop 2>/dev/null || true
+    docker ps -q --filter "publish=54321" | xargs -r docker stop 2>/dev/null || true
+    docker ps -q --filter "publish=54322" | xargs -r docker stop 2>/dev/null || true
+    
+    echo -e "${GREEN}✅ Docker containers stopped${NC}"
+else
+    echo -e "${YELLOW}⚠️  Docker not found, skipping container cleanup${NC}"
+fi
+
 # Clean up any orphaned processes
 echo -e "${BLUE}🧹 Cleaning up...${NC}"
 ps aux | grep -E "(supabase|vite|yacht-sentinel)" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || true

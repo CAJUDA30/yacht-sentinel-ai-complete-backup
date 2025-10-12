@@ -22,6 +22,7 @@ import { useOffline } from '@/contexts/OfflineContext';
 import { systemHealthService, SystemHealthStatus } from '@/services/systemHealthService';
 import { comprehensiveHealthCheck } from '@/services/comprehensiveHealthCheck';
 import { debugConsole } from '@/services/debugConsole';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth'; // Added for authentication check
 import { toast } from '@/components/ui/use-toast';
 
 interface SystemStatus {
@@ -42,6 +43,7 @@ const SystemStatusIndicator: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { isConnected, data } = useRealtime();
   const { isOnline, pendingSync } = useOffline();
+  const { user } = useSupabaseAuth();
 
   // Subscribe to system health updates
   useEffect(() => {
@@ -49,21 +51,41 @@ const SystemStatusIndicator: React.FC = () => {
       setSystemHealth(health);
     });
 
-    // Get initial health status
-    const currentHealth = systemHealthService.getHealthStatus();
-    if (currentHealth) {
-      setSystemHealth(currentHealth);
+    // CRITICAL: Only perform health checks if user is authenticated
+    if (user) {
+      debugConsole.info('SYSTEM_STATUS', '🔐 User authenticated - retrieving system health status');
+      
+      // Get initial health status
+      const currentHealth = systemHealthService.getHealthStatus();
+      if (currentHealth) {
+        setSystemHealth(currentHealth);
+      } else {
+        // Trigger initial health check if none exists (only when authenticated)
+        debugConsole.info('SYSTEM_STATUS', '🏥 No existing health status - triggering initial check');
+        systemHealthService.performHealthCheck(true);
+      }
     } else {
-      // Trigger initial health check if none exists
-      systemHealthService.performHealthCheck(true);
+      debugConsole.info('SYSTEM_STATUS', '🔒 User not authenticated - skipping health check initialization');
+      setSystemHealth(null);
     }
 
     return unsubscribe;
-  }, []);
+  }, [user]);
 
   // Manual refresh function with comprehensive health check
   const handleRefresh = async () => {
     if (isRefreshing) return;
+    
+    // CRITICAL: Only allow health checks if user is authenticated
+    if (!user) {
+      debugConsole.warn('SYSTEM_STATUS', '🔒 Cannot perform health check - user not authenticated');
+      toast({
+        title: 'Authentication Required',
+        description: 'Please log in to perform system health checks',
+        variant: 'destructive'
+      });
+      return;
+    }
     
     setIsRefreshing(true);
     try {

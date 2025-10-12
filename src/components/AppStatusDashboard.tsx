@@ -22,10 +22,12 @@ import { debugConsole } from '@/services/debugConsole';
 import { ComprehensiveVerification } from '@/components/ComprehensiveVerification';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 
 export const AppStatusDashboard = () => {
   const [systemHealth, setSystemHealth] = useState<SystemHealthStatus | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { user } = useSupabaseAuth();
 
   // Subscribe to system health updates
   useEffect(() => {
@@ -33,20 +35,40 @@ export const AppStatusDashboard = () => {
       setSystemHealth(health);
     });
 
-    // Get initial health status
-    const currentHealth = systemHealthService.getHealthStatus();
-    if (currentHealth) {
-      setSystemHealth(currentHealth);
+    // CRITICAL: Only perform health checks if user is authenticated
+    if (user) {
+      debugConsole.info('APP_STATUS', '🔐 User authenticated - retrieving system health status');
+      
+      // Get initial health status
+      const currentHealth = systemHealthService.getHealthStatus();
+      if (currentHealth) {
+        setSystemHealth(currentHealth);
+      } else {
+        // Trigger initial health check (only when authenticated)
+        debugConsole.info('APP_STATUS', '🏥 No existing health status - triggering initial check');
+        systemHealthService.performHealthCheck(true);
+      }
     } else {
-      // Trigger initial health check
-      systemHealthService.performHealthCheck(true);
+      debugConsole.info('APP_STATUS', '🔒 User not authenticated - skipping health check initialization');
+      setSystemHealth(null);
     }
 
     return unsubscribe;
-  }, []);
+  }, [user]);
 
   const refreshStatus = async () => {
     if (isRefreshing) return;
+    
+    // CRITICAL: Only allow health checks if user is authenticated
+    if (!user) {
+      debugConsole.warn('APP_STATUS', '🔒 Cannot perform health check - user not authenticated');
+      toast({
+        title: 'Authentication Required',
+        description: 'Please log in to perform system health checks',
+        variant: 'destructive'
+      });
+      return;
+    }
     
     setIsRefreshing(true);
     

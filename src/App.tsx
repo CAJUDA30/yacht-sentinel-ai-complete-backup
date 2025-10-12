@@ -112,6 +112,8 @@ const AppStartupHandler = () => {
   // Initialize enterprise health orchestrator - ONLY when authenticated
   React.useEffect(() => {
     if (!shouldInitialize) {
+      // Disable periodic health checks when not authenticated
+      systemHealthService.disablePeriodicChecks();
       return; // Don't initialize until user is logged in
     }
     
@@ -123,6 +125,10 @@ const AppStartupHandler = () => {
 
       try {
         debugConsole.info('SYSTEM', '🏢 Initializing Enterprise Health Orchestrator - Zero Manual Intervention Mode');
+        
+        // CRITICAL: Enable periodic health checks AFTER authentication
+        debugConsole.info('SYSTEM', '🔐 Authentication confirmed - enabling system health monitoring');
+        systemHealthService.enablePeriodicChecks();
         
         // Initialize RLS Health Service first (critical for DELETE operations)
         debugConsole.info('SYSTEM', '🔒 Initializing RLS Health Monitoring - Preventing Policy Conflicts');
@@ -136,7 +142,8 @@ const AppStartupHandler = () => {
           manual_intervention: 'disabled',
           systematic_verification: 'enabled',
           professional_monitoring: 'active',
-          rls_health_monitoring: 'active'
+          rls_health_monitoring: 'active',
+          periodic_health_checks: 'enabled'
         });
         
       } catch (error: any) {
@@ -155,6 +162,8 @@ const AppStartupHandler = () => {
     return () => {
       clearTimeout(initTimeout);
       if (isInitialized) {
+        // Cleanup when component unmounts or user logs out
+        systemHealthService.disablePeriodicChecks();
         rlsHealthService.destroy();
         enterpriseHealthOrchestrator.cleanup();
       }

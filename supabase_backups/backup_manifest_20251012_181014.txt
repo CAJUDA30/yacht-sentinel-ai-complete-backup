@@ -1,0 +1,25 @@
+YACHT SENTINEL AI - COMPREHENSIVE BACKUP MANIFEST
+================================================
+Backup Date: Sun Oct 12 18:10:14 CEST 2025
+Backup Timestamp: 20251012_181014
+
+FILES CREATED:
+- yacht_sentinel_20251012_181014_COMPLETE.dump      # Complete database backup
+- yacht_sentinel_20251012_181014_SCHEMA_RLS.sql     # Schema and RLS policies  
+- functions_triggers_20251012_181014.sql            # Functions and triggers
+- edge_functions_20251012_181014.tar.gz             # All Edge Functions
+- migrations_20251012_181014.tar.gz                 # All migrations
+- rls_policies_detailed_20251012_181014.sql         # Detailed RLS policies
+- backup_manifest_20251012_181014.txt               # This manifest file
+
+RESTORE INSTRUCTIONS:
+1. Database: pg_restore -d postgres yacht_sentinel_20251012_181014_COMPLETE.dump
+2. Edge Functions: tar -xzf edge_functions_20251012_181014.tar.gz
+3. Migrations: tar -xzf migrations_20251012_181014.tar.gz
+
+SYSTEM STATUS AT BACKUP:
+- All endpoints verified working (HTTP 200)
+- Superadmin account: superadmin@yachtexcel.com
+- RLS policies: Non-recursive and secure
+- Edge Functions: 65+ functions included
+- Database tables: 17 production tables

@@ -64,6 +64,13 @@ if (import.meta.env.DEV) {
     if (str.includes('GoTrueClient@') && 
         (str.includes('#_acquireLock') || str.includes('lock acquired'))) return true;
     
+    // Filter auth spam for performance
+    if (str.includes('[useSupabaseAuth] 🚀 MASTER HOOK initialized, subscribers:')) return true;
+    if (str.includes('[useSupabaseAuth] Using existing master state:')) return true;
+    if (str.includes('[UserRoleProvider] ✅ Using Master Auth System')) return true;
+    if (str.includes('[SYSTEM] ⏳ Waiting for AI system to be ready')) return true;
+    if (str.includes('[useSupabaseAuth] Init already in progress')) return true;
+    
     return false;
   };
   
