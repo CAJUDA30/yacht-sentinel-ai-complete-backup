@@ -143,6 +143,154 @@ async function getGoogleAccessToken(): Promise<string> {
   return tokenJson.access_token;
 }
 
+async function listDocumentAIProcessors(projectId: string, locations: string[] = ['us', 'eu', 'asia1']) {
+  const accessToken = await getGoogleAccessToken();
+  const allProcessors: any[] = [];
+  
+  console.log(`[gcp-unified-config] Discovering processors across ${locations.length} locations: ${locations.join(', ')}`);
+  
+  for (const location of locations) {
+    try {
+      const url = `https://documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors`;
+      console.log(`[gcp-unified-config] Fetching processors from ${location}: ${url}`);
+      
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      
+      const json = await resp.json();
+      if (!resp.ok) {
+        console.error(`[gcp-unified-config] Error fetching processors from ${location}:`, json.error?.message || 'Unknown error');
+        continue; // Continue with other locations
+      }
+      
+      const processors = json.processors || [];
+      console.log(`[gcp-unified-config] Found ${processors.length} processors in ${location}`);
+      
+      // Add location metadata to each processor
+      processors.forEach((processor: any) => {
+        processor.location = location;
+        processor.projectId = projectId;
+        // Extract short processor ID from full name
+        const match = processor.name?.match(/processors\/([^/]+)$/);
+        processor.shortId = match ? match[1] : processor.name;
+      });
+      
+      allProcessors.push(...processors);
+    } catch (error) {
+      console.error(`[gcp-unified-config] Exception fetching processors from ${location}:`, error);
+      // Continue with other locations
+    }
+  }
+  
+  console.log(`[gcp-unified-config] Total processors discovered: ${allProcessors.length}`);
+  return allProcessors;
+}
+
+async function syncProcessorsToDatabase(processors: any[]) {
+  console.log(`[gcp-unified-config] Syncing ${processors.length} processors to database`);
+  
+  const syncResults = {
+    created: 0,
+    updated: 0,
+    errors: 0,
+    skipped: 0,
+    details: [] as any[]
+  };
+  
+  for (const processor of processors) {
+    try {
+      if (!processor.shortId || !processor.displayName) {
+        console.warn(`[gcp-unified-config] Skipping processor with missing required fields:`, processor.name);
+        syncResults.skipped++;
+        continue;
+      }
+      
+      // Check if processor already exists
+      const { data: existing, error: selectError } = await supabase
+        .from('document_ai_processors')
+        .select('id, processor_id, updated_at')
+        .eq('processor_id', processor.shortId)
+        .single();
+      
+      if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = no rows found
+        throw selectError;
+      }
+      
+      const processorData = {
+        name: processor.displayName?.toLowerCase().replace(/[^a-z0-9]/g, '-') || processor.shortId,
+        display_name: processor.displayName || processor.name,
+        processor_id: processor.shortId,
+        processor_full_id: processor.name,
+        processor_type: processor.type || 'CUSTOM_EXTRACTOR',
+        location: processor.location,
+        project_id: processor.projectId,
+        specialization: processor.displayName || 'Document Processing',
+        description: `Auto-discovered processor: ${processor.displayName || processor.name}`,
+        is_active: processor.state === 'ENABLED',
+        configuration: {
+          auto_discovered: true,
+          cloud_state: processor.state,
+          create_time: processor.createTime,
+          kms_key_name: processor.kmsKeyName,
+          process_endpoint: processor.processEndpoint
+        },
+        updated_at: new Date().toISOString()
+      };
+      
+      if (existing) {
+        // Update existing processor
+        const { error: updateError } = await supabase
+          .from('document_ai_processors')
+          .update(processorData)
+          .eq('id', existing.id);
+        
+        if (updateError) throw updateError;
+        
+        syncResults.updated++;
+        syncResults.details.push({
+          processor_id: processor.shortId,
+          action: 'updated',
+          display_name: processor.displayName
+        });
+        
+        console.log(`[gcp-unified-config] Updated processor: ${processor.displayName} (${processor.shortId})`);
+      } else {
+        // Create new processor
+        const { error: insertError } = await supabase
+          .from('document_ai_processors')
+          .insert([{
+            ...processorData,
+            id: crypto.randomUUID(),
+            created_at: new Date().toISOString()
+          }]);
+        
+        if (insertError) throw insertError;
+        
+        syncResults.created++;
+        syncResults.details.push({
+          processor_id: processor.shortId,
+          action: 'created',
+          display_name: processor.displayName
+        });
+        
+        console.log(`[gcp-unified-config] Created processor: ${processor.displayName} (${processor.shortId})`);
+      }
+    } catch (error) {
+      console.error(`[gcp-unified-config] Error syncing processor ${processor.shortId}:`, error);
+      syncResults.errors++;
+      syncResults.details.push({
+        processor_id: processor.shortId,
+        action: 'error',
+        error: error.message
+      });
+    }
+  }
+  
+  console.log(`[gcp-unified-config] Sync completed:`, syncResults);
+  return syncResults;
+}
+
 async function documentAIGetProcessor(processorId: string) {
   const accessToken = await getGoogleAccessToken();
   const resp = await fetch(`https://documentai.googleapis.com/v1/${processorId}`, {
@@ -197,24 +345,171 @@ async function handleTestAllConnections() {
     documentAI: { configured: !!pres.GOOGLE_SERVICE_ACCOUNT_JSON, status: "missing_credentials" },
   };
 
-  // Document AI test (GET processor)
-  const processorId = cfg?.services?.documentAI?.processorId as string | undefined;
-  if (results.documentAI.configured && processorId) {
+  // First attempt processor discovery/sync from Google Cloud
+  if (results.documentAI.configured) {
     try {
-      const info = await documentAIGetProcessor(processorId);
-      results.documentAI.status = "ok";
-      results.documentAI.processor = info?.name || processorId;
-      await recordLog({ action: "connection_test", provider: "documentAI", success: true, latency_ms: Date.now() - started });
-    } catch (e: any) {
-      results.documentAI.status = "error";
-      results.documentAI.error = e.message;
-      await recordLog({ action: "connection_test", provider: "documentAI", success: false, error_message: e.message });
+      const projectId = cfg?.project_id || Deno.env.get("GOOGLE_CLOUD_PROJECT_ID") || "338523806048";
+      console.log(`[gcp-unified-config] Attempting processor discovery and sync for project: ${projectId}`);
+      
+      const cloudProcessors = await listDocumentAIProcessors(projectId);
+      const syncResults = await syncProcessorsToDatabase(cloudProcessors);
+      
+      results.documentAI.discovery = {
+        processors_found: cloudProcessors.length,
+        sync_results: syncResults,
+        status: "success"
+      };
+      
+      console.log(`[gcp-unified-config] Processor discovery completed: ${cloudProcessors.length} found, ${syncResults.created} created, ${syncResults.updated} updated`);
+    } catch (discoveryError: any) {
+      console.error(`[gcp-unified-config] Processor discovery failed:`, discoveryError);
+      results.documentAI.discovery = {
+        status: "error",
+        error: discoveryError.message
+      };
     }
-  } else if (results.documentAI.configured && !processorId) {
-    results.documentAI.status = "missing_processor";
   }
 
+  // Then test processor connections using database processors
+  try {
+    const { data: dbProcessors, error: dbError } = await supabase
+      .from('document_ai_processors')
+      .select('processor_id, processor_full_id, display_name, is_active')
+      .eq('is_active', true)
+      .order('priority', { ascending: true })
+      .limit(5); // Test up to 5 processors
+    
+    if (dbError) throw dbError;
+    
+    results.documentAI.database_processors = {
+      total_active: dbProcessors?.length || 0,
+      tested: [] as any[]
+    };
+    
+    if (dbProcessors && dbProcessors.length > 0) {
+      console.log(`[gcp-unified-config] Testing ${dbProcessors.length} database processors`);
+      
+      for (const processor of dbProcessors.slice(0, 3)) { // Test first 3
+        try {
+          const processorId = processor.processor_full_id || `projects/${cfg?.project_id || "338523806048"}/locations/us/processors/${processor.processor_id}`;
+          const info = await documentAIGetProcessor(processorId);
+          
+          results.documentAI.database_processors.tested.push({
+            processor_id: processor.processor_id,
+            display_name: processor.display_name,
+            status: "ok",
+            cloud_name: info?.name || processorId
+          });
+        } catch (testError: any) {
+          results.documentAI.database_processors.tested.push({
+            processor_id: processor.processor_id,
+            display_name: processor.display_name,
+            status: "error",
+            error: testError.message
+          });
+        }
+      }
+      
+      results.documentAI.status = "ok";
+    } else {
+      results.documentAI.status = "no_processors";
+      results.documentAI.message = "No active processors found in database. Try running processor discovery.";
+    }
+  } catch (dbTestError: any) {
+    console.error(`[gcp-unified-config] Database processor test failed:`, dbTestError);
+    results.documentAI.status = "database_error";
+    results.documentAI.error = dbTestError.message;
+  }
+
+  await recordLog({ 
+    action: "connection_test", 
+    provider: "documentAI", 
+    success: results.documentAI.status === "ok", 
+    latency_ms: Date.now() - started,
+    details: { discovery: results.documentAI.discovery, processors_tested: results.documentAI.database_processors?.tested?.length || 0 }
+  });
+
   return { results, total_ms: Date.now() - started };
+}
+
+async function handleListProcessors(payload?: any) {
+  const started = Date.now();
+  
+  try {
+    // Get project ID from config or environment
+    const cfgRow = await getConfig();
+    const cfg: any = cfgRow?.config || {};
+    const projectId = payload?.project_id || cfg?.project_id || Deno.env.get("GOOGLE_CLOUD_PROJECT_ID") || "338523806048";
+    const locations = payload?.locations || ['us', 'eu', 'asia1'];
+    
+    console.log(`[gcp-unified-config] Starting processor discovery for project ${projectId}`);
+    
+    // Discover processors from Google Cloud
+    const cloudProcessors = await listDocumentAIProcessors(projectId, locations);
+    
+    // Sync to database
+    const syncResults = await syncProcessorsToDatabase(cloudProcessors);
+    
+    // Get updated database state
+    const { data: dbProcessors, error: dbError } = await supabase
+      .from('document_ai_processors')
+      .select('*')
+      .order('priority', { ascending: true });
+    
+    if (dbError) {
+      console.error('[gcp-unified-config] Error fetching updated processors:', dbError);
+    }
+    
+    const result = {
+      success: true,
+      processors_discovered: cloudProcessors.length,
+      sync_results: syncResults,
+      database_processors: dbProcessors || [],
+      locations_searched: locations,
+      project_id: projectId,
+      discovery_time_ms: Date.now() - started
+    };
+    
+    await recordLog({ 
+      action: "list_processors", 
+      provider: "documentAI", 
+      success: true, 
+      latency_ms: Date.now() - started,
+      details: { 
+        discovered: cloudProcessors.length, 
+        synced: syncResults.created + syncResults.updated,
+        locations: locations.length 
+      }
+    });
+    
+    console.log(`[gcp-unified-config] Processor discovery completed successfully:`, result);
+    return result;
+    
+  } catch (error: any) {
+    console.error('[gcp-unified-config] handleListProcessors error:', error);
+    
+    await recordLog({ 
+      action: "list_processors", 
+      provider: "documentAI", 
+      success: false, 
+      latency_ms: Date.now() - started,
+      error_message: error.message
+    });
+    
+    // Return graceful error response
+    return {
+      success: false,
+      error: error.message,
+      processors_discovered: 0,
+      sync_results: { created: 0, updated: 0, errors: 1, skipped: 0, details: [] },
+      database_processors: [],
+      troubleshooting: {
+        check_credentials: !Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON"),
+        check_project_id: !Deno.env.get("GOOGLE_CLOUD_PROJECT_ID"),
+        suggested_action: "Verify Google Cloud credentials and project configuration"
+      }
+    };
+  }
 }
 
 async function handleRunTest(payload: any) {
@@ -363,6 +658,17 @@ serve(async (req) => {
 
     if (action === "check_updates") {
       const out = await handleCheckUpdates();
+      return new Response(JSON.stringify(out), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    
+    if (action === "list_processors") {
+      // Allow superadmins to discover and sync processors
+      if (!isSuper) {
+        console.log(`[gcp-unified-config] list_processors requires superadmin, user is super: ${isSuper}`);
+        return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      const out = await handleListProcessors(payload);
       return new Response(JSON.stringify(out), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     
