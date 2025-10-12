@@ -1,0 +1,75 @@
+SUPABASE BACKUP INFORMATION
+===========================
+
+Backup Timestamp: 20251012_104247
+Backup Date: 2025-10-12 10:44:13
+Backup Type: Complete System Backup (Post-RLS Fix)
+
+SYSTEM STATISTICS AT BACKUP TIME:
+==================================
+Database Tables: 21
+RLS Policies: 88
+Database Functions: 14
+Edge Functions: 74
+Migrations: 22
+
+CRITICAL DATA COUNTS:
+====================
+User Roles: 1
+Role Permissions: 35
+Document AI Processors: 5
+Auth Users: 1
+
+BACKUP COMPONENTS:
+==================
+✅ full_database_dump.sql - Complete PostgreSQL dump
+✅ rls_policies.csv - All RLS policies (88)
+✅ database_functions.csv - All functions (14)
+✅ migrations/ - All migration files (22)
+✅ functions/ - All Edge Functions (74)
+✅ config.toml - Supabase configuration
+✅ seed.sql - Database seed data
+✅ data_user_roles.csv - User role data
+✅ data_role_permissions.csv - Permission data
+✅ data_document_ai_processors.csv - Processor configs
+✅ data_auth_users.csv - Auth user data
+
+SYSTEM HEALTH AT BACKUP:
+=========================
+Overall Health: 93% (14/15)
+Critical Issues: 0
+Warnings: 1
+
+KEY FIXES INCLUDED:
+===================
+✅ RLS policies fixed (removed is_active references)
+✅ Migration conflicts resolved
+✅ ON CONFLICT constraints corrected
+✅ Function dependencies fixed with CASCADE
+✅ Schema mismatches corrected
+
+ACTIVE SUPERADMIN:
+==================
+Email: superadmin@yachtexcel.com
+User ID: c777289d-36f2-4e44-86e0-e744dfb2689e
+Role: superadmin
+Status: Active
+
+RESTORE INSTRUCTIONS:
+=====================
+1. Use ./RESTORE.sh for automatic restore
+2. Or manually restore with: psql < full_database_dump.sql
+3. See BACKUP_MANIFEST.md for detailed instructions
+
+VERIFICATION:
+=============
+After restore, check:
+- Database tables: Should be 21
+- RLS policies: Should be 88
+- No 403 errors on user_roles table
+- Superadmin login works
+- System health > 90%
+
+===========================
+Backup created by: Yacht Sentinel AI System
+===========================

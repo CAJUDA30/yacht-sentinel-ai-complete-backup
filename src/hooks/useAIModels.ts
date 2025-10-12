@@ -32,7 +32,7 @@ export const useAIModels = () => {
     queryKey: ['ai-providers'],
     queryFn: async (): Promise<AIProvider[]> => {
       const { data, error } = await supabase
-        .from('ai_providers_unified')
+        .from('ai_providers_with_keys')
         .select('*')
         .eq('is_active', true)
         .order('priority', { ascending: false });

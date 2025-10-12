@@ -100,7 +100,7 @@ export class AIProviderAdapter {
   static async getProviders(): Promise<{ data: any[]; error: any }> {
     try {
       const { data, error } = await supabase
-        .from('ai_providers_unified')
+        .from('ai_providers_with_keys')
         .select('*')
         .order('created_at', { ascending: false });
         

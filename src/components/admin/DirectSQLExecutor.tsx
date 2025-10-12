@@ -205,7 +205,7 @@ const DirectSQLExecutor: React.FC = () => {
       // Test ai_providers_unified
       try {
         const { data: providerData, error: providerError } = await supabase
-          .from('ai_providers_unified')
+          .from('ai_providers_with_keys')
           .select('id')
           .limit(1);
 

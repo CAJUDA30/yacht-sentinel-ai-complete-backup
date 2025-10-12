@@ -1,6 +1,5 @@
--- DYNAMIC USER ROLES & AUTHENTICATION SYSTEM
+-- DYNAMIC USER ROLES & AUTHENTICATION SYSTEM (FIXED)
 -- Complete scalable system for hundreds of users with granular permissions
--- Replaces hardcoded superadmin system with dynamic role-based authorization
 
 -- =====================================================
 -- 1. DROP EXISTING CONFLICTING STRUCTURES
@@ -9,8 +8,14 @@
 -- Drop existing triggers and functions that might conflict
 DROP TRIGGER IF EXISTS ensure_superadmin_role_trigger ON auth.users;
 DROP TRIGGER IF EXISTS handle_new_user_signup_trigger ON auth.users;
-DROP FUNCTION IF EXISTS public.ensure_superadmin_role();
-DROP FUNCTION IF EXISTS public.handle_new_user_signup();
+DROP FUNCTION IF EXISTS public.ensure_superadmin_role() CASCADE;
+DROP FUNCTION IF EXISTS public.handle_new_user_signup() CASCADE;
+DROP FUNCTION IF EXISTS public.get_user_roles(UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.user_has_permission(TEXT, TEXT, TEXT, UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.is_superadmin(UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.is_superadmin() CASCADE;
+DROP FUNCTION IF EXISTS public.assign_user_role(UUID, TEXT, UUID, TEXT, UUID, TIMESTAMPTZ) CASCADE;
+DROP FUNCTION IF EXISTS public.get_user_profile(UUID) CASCADE;
 
 -- =====================================================
 -- 2. ENHANCED USER PROFILES TABLE
@@ -34,17 +39,16 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
 );
 
 -- =====================================================
--- 3. DYNAMIC USER ROLES TABLE (ENHANCED)
+-- 3. DYNAMIC USER ROLES TABLE (SIMPLIFIED)
 -- =====================================================
 
--- Drop and recreate user_roles with enhanced structure
+-- Drop and recreate user_roles with simplified structure (no yacht reference for now)
 DROP TABLE IF EXISTS public.user_roles CASCADE;
 
 CREATE TABLE public.user_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     role TEXT NOT NULL CHECK (role IN ('guest', 'viewer', 'user', 'manager', 'admin', 'superadmin')),
-    yacht_id UUID REFERENCES public.yachts(id) ON DELETE SET NULL, -- For yacht-specific roles
     department TEXT, -- For department-specific roles
     granted_by UUID REFERENCES auth.users(id),
     granted_at TIMESTAMPTZ DEFAULT NOW(),
@@ -56,8 +60,9 @@ CREATE TABLE public.user_roles (
 );
 
 -- Add unique constraint separately to handle NULL values properly
+DROP INDEX IF EXISTS idx_user_roles_unique;
 CREATE UNIQUE INDEX idx_user_roles_unique 
-ON public.user_roles (user_id, role, COALESCE(yacht_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(department, ''));
+ON public.user_roles (user_id, role, COALESCE(department, ''));
 
 -- =====================================================
 -- 4. ROLE PERMISSIONS MATRIX
@@ -74,6 +79,7 @@ CREATE TABLE IF NOT EXISTS public.role_permissions (
 );
 
 -- Add unique constraint for role permissions
+DROP INDEX IF EXISTS idx_role_permissions_unique;
 CREATE UNIQUE INDEX idx_role_permissions_unique 
 ON public.role_permissions (role, permission, COALESCE(resource, ''), action);
 
@@ -140,7 +146,6 @@ INSERT INTO public.role_permissions (role, permission, resource, action) VALUES
 CREATE OR REPLACE FUNCTION public.get_user_roles(_user_id UUID DEFAULT NULL)
 RETURNS TABLE(
     role TEXT, 
-    yacht_id UUID, 
     department TEXT, 
     is_active BOOLEAN,
     expires_at TIMESTAMPTZ
@@ -160,7 +165,6 @@ BEGIN
     RETURN QUERY
     SELECT 
         ur.role, 
-        ur.yacht_id, 
         ur.department, 
         ur.is_active,
         ur.expires_at
@@ -264,7 +268,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.assign_user_role(
     _user_id UUID,
     _role TEXT,
-    _yacht_id UUID DEFAULT NULL,
     _department TEXT DEFAULT NULL,
     _granted_by UUID DEFAULT NULL,
     _expires_at TIMESTAMPTZ DEFAULT NULL
@@ -289,11 +292,11 @@ BEGIN
     END IF;
     
     INSERT INTO public.user_roles (
-        user_id, role, yacht_id, department, granted_by, expires_at
+        user_id, role, department, granted_by, expires_at
     ) VALUES (
-        _user_id, _role, _yacht_id, _department, granter_id, _expires_at
+        _user_id, _role, _department, granter_id, _expires_at
     )
-    ON CONFLICT (user_id, role, COALESCE(yacht_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(department, ''))
+    ON CONFLICT (user_id, role, COALESCE(department, ''))
     DO UPDATE SET
         is_active = true,
         granted_by = granter_id,
@@ -375,7 +378,13 @@ DROP POLICY IF EXISTS "Admins can manage all profiles" ON public.user_profiles;
 DROP POLICY IF EXISTS "Users can view their own roles" ON public.user_roles;
 DROP POLICY IF EXISTS "Managers can view team roles" ON public.user_roles;
 DROP POLICY IF EXISTS "Admins can manage all roles" ON public.user_roles;
+DROP POLICY IF EXISTS "Admins can manage user roles" ON public.user_roles;
 DROP POLICY IF EXISTS "Superadmins can manage all roles" ON public.user_roles;
+DROP POLICY IF EXISTS "All authenticated users can view permissions" ON public.role_permissions;
+DROP POLICY IF EXISTS "Only superadmins can modify permissions" ON public.role_permissions;
+DROP POLICY IF EXISTS "Service role full access - profiles" ON public.user_profiles;
+DROP POLICY IF EXISTS "Service role full access - roles" ON public.user_roles;
+DROP POLICY IF EXISTS "Service role full access - permissions" ON public.role_permissions;
 
 -- User Profiles Policies
 CREATE POLICY "Users can view their own profile"
@@ -443,7 +452,6 @@ CREATE INDEX IF NOT EXISTS idx_user_profiles_active ON public.user_profiles(last
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON public.user_roles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_roles_role ON public.user_roles(role);
 CREATE INDEX IF NOT EXISTS idx_user_roles_active ON public.user_roles(user_id, is_active) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_user_roles_yacht ON public.user_roles(yacht_id, role) WHERE yacht_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_user_roles_department ON public.user_roles(department, role) WHERE department IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_user_roles_expires ON public.user_roles(expires_at) WHERE expires_at IS NOT NULL;
 
@@ -452,68 +460,13 @@ CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON public.role_permissions(
 CREATE INDEX IF NOT EXISTS idx_role_permissions_lookup ON public.role_permissions(role, permission, resource, action);
 
 -- =====================================================
--- 10. UTILITY FUNCTIONS FOR FRONTEND
--- =====================================================
-
--- Function to get user's complete profile with roles and permissions
-CREATE OR REPLACE FUNCTION public.get_user_profile(_user_id UUID DEFAULT NULL)
-RETURNS TABLE(
-    user_id UUID,
-    email TEXT,
-    display_name TEXT,
-    avatar_url TEXT,
-    department TEXT,
-    job_title TEXT,
-    roles TEXT[],
-    permissions TEXT[],
-    is_superadmin BOOLEAN,
-    onboarding_completed BOOLEAN,
-    last_active_at TIMESTAMPTZ
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-    target_user_id UUID;
-BEGIN
-    target_user_id := COALESCE(_user_id, auth.uid());
-    
-    -- Check if user can view this profile
-    IF target_user_id != auth.uid() AND NOT public.user_has_permission('read', 'users', 'view_all') THEN
-        RAISE EXCEPTION 'Insufficient permissions to view user profile';
-    END IF;
-    
-    RETURN QUERY
-    SELECT 
-        up.user_id,
-        au.email,
-        up.display_name,
-        up.avatar_url,
-        up.department,
-        up.job_title,
-        COALESCE(ARRAY_AGG(DISTINCT ur.role) FILTER (WHERE ur.role IS NOT NULL), ARRAY[]::TEXT[]) AS roles,
-        COALESCE(ARRAY_AGG(DISTINCT rp.permission || ':' || COALESCE(rp.resource, '*') || ':' || rp.action) FILTER (WHERE rp.permission IS NOT NULL), ARRAY[]::TEXT[]) AS permissions,
-        public.is_superadmin(target_user_id) AS is_superadmin,
-        up.onboarding_completed,
-        up.last_active_at
-    FROM public.user_profiles up
-    JOIN auth.users au ON up.user_id = au.id
-    LEFT JOIN public.user_roles ur ON up.user_id = ur.user_id AND ur.is_active = true
-    LEFT JOIN public.role_permissions rp ON ur.role = rp.role
-    WHERE up.user_id = target_user_id
-    GROUP BY up.user_id, au.email, up.display_name, up.avatar_url, up.department, up.job_title, up.onboarding_completed, up.last_active_at;
-END;
-$$;
-
--- =====================================================
--- 11. GRANT PERMISSIONS TO FUNCTIONS
+-- 10. GRANT PERMISSIONS TO FUNCTIONS
 -- =====================================================
 
 GRANT EXECUTE ON FUNCTION public.get_user_roles(UUID) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.user_has_permission(TEXT, TEXT, TEXT, UUID) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.is_superadmin(UUID) TO authenticated, anon;
-GRANT EXECUTE ON FUNCTION public.assign_user_role(UUID, TEXT, UUID, TEXT, UUID, TIMESTAMPTZ) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_user_profile(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.assign_user_role(UUID, TEXT, TEXT, UUID, TIMESTAMPTZ) TO authenticated;
 
 -- Create parameterless versions for compatibility
 CREATE OR REPLACE FUNCTION public.is_superadmin()
@@ -529,37 +482,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.is_superadmin() TO authenticated, anon;
 
 -- =====================================================
--- 12. MIGRATE EXISTING SUPERADMIN USER
--- =====================================================
-
--- Ensure existing superadmin user has proper setup
-DO $$
-BEGIN
-    -- If superadmin@yachtexcel.com exists, ensure they have proper profile and role
-    IF EXISTS (SELECT 1 FROM auth.users WHERE email = 'superadmin@yachtexcel.com') THEN
-        -- Create/update profile
-        INSERT INTO public.user_profiles (user_id, display_name)
-        SELECT id, 'Super Administrator'
-        FROM auth.users 
-        WHERE email = 'superadmin@yachtexcel.com'
-        ON CONFLICT (user_id) DO UPDATE SET 
-            display_name = COALESCE(user_profiles.display_name, 'Super Administrator'),
-            updated_at = NOW();
-        
-        -- Ensure superadmin role
-        INSERT INTO public.user_roles (user_id, role, granted_by)
-        SELECT id, 'superadmin', id
-        FROM auth.users 
-        WHERE email = 'superadmin@yachtexcel.com'
-        ON CONFLICT (user_id, role, COALESCE(yacht_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(department, ''))
-        DO UPDATE SET 
-            is_active = true,
-            updated_at = NOW();
-    END IF;
-END $$;
-
--- =====================================================
--- 13. FINAL VERIFICATION
+-- 11. FINAL VERIFICATION
 -- =====================================================
 
 DO $$
@@ -567,12 +490,10 @@ DECLARE
     total_users INTEGER;
     total_roles INTEGER;
     total_permissions INTEGER;
-    superadmin_count INTEGER;
 BEGIN
     SELECT COUNT(*) INTO total_users FROM public.user_profiles;
     SELECT COUNT(*) INTO total_roles FROM public.user_roles WHERE is_active = true;
     SELECT COUNT(*) INTO total_permissions FROM public.role_permissions;
-    SELECT COUNT(*) INTO superadmin_count FROM public.user_roles WHERE role = 'superadmin' AND is_active = true;
     
     RAISE NOTICE '==================================================';
     RAISE NOTICE 'DYNAMIC USER ROLES SYSTEM DEPLOYED SUCCESSFULLY';
@@ -581,17 +502,15 @@ BEGIN
     RAISE NOTICE '- Total user profiles: %', total_users;
     RAISE NOTICE '- Active role assignments: %', total_roles;
     RAISE NOTICE '- Permission definitions: %', total_permissions;
-    RAISE NOTICE '- Active superadmins: %', superadmin_count;
     RAISE NOTICE '';
     RAISE NOTICE 'Features Enabled:';
     RAISE NOTICE '✅ Dynamic role assignment for any user';
     RAISE NOTICE '✅ Hierarchical permission system (6 role levels)';
     RAISE NOTICE '✅ Automatic user onboarding with smart role detection';
-    RAISE NOTICE '✅ Yacht-specific and department-specific roles';
+    RAISE NOTICE '✅ Department-specific roles';
     RAISE NOTICE '✅ Temporary role assignments with expiration';
     RAISE NOTICE '✅ Comprehensive RLS policies with permission checking';
     RAISE NOTICE '✅ Performance-optimized indexes';
-    RAISE NOTICE '✅ Frontend utility functions';
     RAISE NOTICE '✅ Automatic migration of existing users';
     RAISE NOTICE '';
     RAISE NOTICE 'Ready for production with hundreds of users!';

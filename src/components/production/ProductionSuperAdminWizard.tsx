@@ -219,7 +219,7 @@ export function ProductionSuperAdminWizard() {
   const loadExistingProviders = async () => {
     try {
       const { data, error } = await supabase
-        .from('ai_providers_unified')
+        .from('ai_providers_with_keys')
         .select('*')
         .order('is_primary', { ascending: false });
 

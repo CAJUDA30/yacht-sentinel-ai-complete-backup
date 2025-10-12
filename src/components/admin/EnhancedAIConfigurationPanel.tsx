@@ -51,7 +51,7 @@ export default function EnhancedAIConfigurationPanel() {
     queryKey: ['ai-providers'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('ai_providers_unified')
+        .from('ai_providers_with_keys')
         .select('*')
         .order('name');
       if (error) {

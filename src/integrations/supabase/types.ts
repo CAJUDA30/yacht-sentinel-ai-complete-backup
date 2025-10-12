@@ -67,6 +67,13 @@ export type Database = {
             referencedRelation: "ai_providers_unified"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ai_health_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: true
+            referencedRelation: "ai_providers_with_keys"
+            referencedColumns: ["id"]
+          },
         ]
       }
       ai_models_unified: {
@@ -129,6 +136,13 @@ export type Database = {
             referencedRelation: "ai_providers_unified"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ai_models_unified_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "ai_providers_with_keys"
+            referencedColumns: ["id"]
+          },
         ]
       }
       ai_provider_logs: {
@@ -167,11 +181,19 @@ export type Database = {
             referencedRelation: "ai_providers_unified"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ai_provider_logs_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "ai_providers_with_keys"
+            referencedColumns: ["id"]
+          },
         ]
       }
       ai_providers_unified: {
         Row: {
           api_endpoint: string | null
+          api_key_encrypted: string | null
           api_secret_name: string | null
           auth_header_name: string | null
           auth_method: string | null
@@ -179,6 +201,7 @@ export type Database = {
           base_url: string | null
           capabilities: Json | null
           config: Json | null
+          configuration: Json | null
           created_at: string
           description: string | null
           discovery_url: string | null
@@ -199,6 +222,7 @@ export type Database = {
         }
         Insert: {
           api_endpoint?: string | null
+          api_key_encrypted?: string | null
           api_secret_name?: string | null
           auth_header_name?: string | null
           auth_method?: string | null
@@ -206,6 +230,7 @@ export type Database = {
           base_url?: string | null
           capabilities?: Json | null
           config?: Json | null
+          configuration?: Json | null
           created_at?: string
           description?: string | null
           discovery_url?: string | null
@@ -226,6 +251,7 @@ export type Database = {
         }
         Update: {
           api_endpoint?: string | null
+          api_key_encrypted?: string | null
           api_secret_name?: string | null
           auth_header_name?: string | null
           auth_method?: string | null
@@ -233,6 +259,7 @@ export type Database = {
           base_url?: string | null
           capabilities?: Json | null
           config?: Json | null
+          configuration?: Json | null
           created_at?: string
           description?: string | null
           discovery_url?: string | null
@@ -358,6 +385,93 @@ export type Database = {
           updated_at?: string | null
           updated_by?: string | null
           workflow_config?: Json
+        }
+        Relationships: []
+      }
+      document_ai_processors: {
+        Row: {
+          accuracy: number | null
+          confidence_threshold: number | null
+          configuration: Json | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          display_name: string
+          estimated_cost_per_page: number | null
+          gcp_credentials_encrypted: string | null
+          gcp_service_account_encrypted: string | null
+          id: string
+          is_active: boolean | null
+          is_primary: boolean | null
+          location: string
+          max_pages_per_document: number | null
+          name: string
+          priority: number | null
+          processor_full_id: string
+          processor_id: string
+          processor_type: string
+          project_id: string
+          rate_limit_per_minute: number | null
+          specialization: string
+          supported_formats: string[] | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          confidence_threshold?: number | null
+          configuration?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          display_name: string
+          estimated_cost_per_page?: number | null
+          gcp_credentials_encrypted?: string | null
+          gcp_service_account_encrypted?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          location?: string
+          max_pages_per_document?: number | null
+          name: string
+          priority?: number | null
+          processor_full_id: string
+          processor_id: string
+          processor_type?: string
+          project_id?: string
+          rate_limit_per_minute?: number | null
+          specialization: string
+          supported_formats?: string[] | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          confidence_threshold?: number | null
+          configuration?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          display_name?: string
+          estimated_cost_per_page?: number | null
+          gcp_credentials_encrypted?: string | null
+          gcp_service_account_encrypted?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          location?: string
+          max_pages_per_document?: number | null
+          name?: string
+          priority?: number | null
+          processor_full_id?: string
+          processor_id?: string
+          processor_type?: string
+          project_id?: string
+          rate_limit_per_minute?: number | null
+          specialization?: string
+          supported_formats?: string[] | null
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Relationships: []
       }
@@ -559,6 +673,13 @@ export type Database = {
             referencedRelation: "ai_providers_unified"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "llm_provider_models_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "ai_providers_with_keys"
+            referencedColumns: ["id"]
+          },
         ]
       }
       role_permissions: {
@@ -566,28 +687,34 @@ export type Database = {
           action: string
           conditions: Json | null
           created_at: string | null
+          description: string | null
           id: string
           permission: string
           resource: string | null
           role: string
+          updated_at: string | null
         }
         Insert: {
           action: string
           conditions?: Json | null
           created_at?: string | null
+          description?: string | null
           id?: string
           permission: string
           resource?: string | null
           role: string
+          updated_at?: string | null
         }
         Update: {
           action?: string
           conditions?: Json | null
           created_at?: string | null
+          description?: string | null
           id?: string
           permission?: string
           resource?: string | null
           role?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -696,27 +823,39 @@ export type Database = {
       user_roles: {
         Row: {
           created_at: string | null
-          created_by: string | null
+          department: string | null
+          expires_at: string | null
+          granted_at: string | null
+          granted_by: string | null
           id: string
           is_active: boolean | null
+          permissions: Json | null
           role: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
-          created_by?: string | null
+          department?: string | null
+          expires_at?: string | null
+          granted_at?: string | null
+          granted_by?: string | null
           id?: string
           is_active?: boolean | null
+          permissions?: Json | null
           role: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
           created_at?: string | null
-          created_by?: string | null
+          department?: string | null
+          expires_at?: string | null
+          granted_at?: string | null
+          granted_by?: string | null
           id?: string
           is_active?: boolean | null
+          permissions?: Json | null
           role?: string
           updated_at?: string | null
           user_id?: string
@@ -805,26 +944,235 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      active_document_processors: {
+        Row: {
+          accuracy: number | null
+          configuration: Json | null
+          created_at: string | null
+          description: string | null
+          display_name: string | null
+          id: string | null
+          name: string | null
+          priority: number | null
+          processor_full_id: string | null
+          processor_id: string | null
+          processor_type: string | null
+          specialization: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          configuration?: Json | null
+          created_at?: string | null
+          description?: string | null
+          display_name?: string | null
+          id?: string | null
+          name?: string | null
+          priority?: number | null
+          processor_full_id?: string | null
+          processor_id?: string | null
+          processor_type?: string | null
+          specialization?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          configuration?: Json | null
+          created_at?: string | null
+          description?: string | null
+          display_name?: string | null
+          id?: string | null
+          name?: string | null
+          priority?: number | null
+          processor_full_id?: string | null
+          processor_id?: string | null
+          processor_type?: string | null
+          specialization?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      ai_providers_with_keys: {
+        Row: {
+          api_endpoint: string | null
+          api_key: string | null
+          api_key_encrypted: string | null
+          auth_method: string | null
+          auth_type: string | null
+          base_url: string | null
+          capabilities: Json | null
+          config: Json | null
+          created_at: string | null
+          description: string | null
+          error_count: number | null
+          health_status: string | null
+          id: string | null
+          is_active: boolean | null
+          is_primary: boolean | null
+          last_health_check: string | null
+          name: string | null
+          priority: number | null
+          provider_type: string | null
+          rate_limit_per_minute: number | null
+          success_rate: number | null
+          supported_languages: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          api_endpoint?: string | null
+          api_key?: never
+          api_key_encrypted?: string | null
+          auth_method?: string | null
+          auth_type?: string | null
+          base_url?: string | null
+          capabilities?: Json | null
+          config?: Json | null
+          created_at?: string | null
+          description?: string | null
+          error_count?: number | null
+          health_status?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          last_health_check?: string | null
+          name?: string | null
+          priority?: number | null
+          provider_type?: string | null
+          rate_limit_per_minute?: number | null
+          success_rate?: number | null
+          supported_languages?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          api_endpoint?: string | null
+          api_key?: never
+          api_key_encrypted?: string | null
+          auth_method?: string | null
+          auth_type?: string | null
+          base_url?: string | null
+          capabilities?: Json | null
+          config?: Json | null
+          created_at?: string | null
+          description?: string | null
+          error_count?: number | null
+          health_status?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          last_health_check?: string | null
+          name?: string | null
+          priority?: number | null
+          provider_type?: string | null
+          rate_limit_per_minute?: number | null
+          success_rate?: number | null
+          supported_languages?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      document_ai_processors_with_credentials: {
+        Row: {
+          accuracy: number | null
+          confidence_threshold: number | null
+          configuration: Json | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          display_name: string | null
+          estimated_cost_per_page: number | null
+          gcp_credentials: string | null
+          gcp_credentials_encrypted: string | null
+          gcp_service_account: string | null
+          gcp_service_account_encrypted: string | null
+          id: string | null
+          is_active: boolean | null
+          is_primary: boolean | null
+          location: string | null
+          max_pages_per_document: number | null
+          name: string | null
+          priority: number | null
+          processor_full_id: string | null
+          processor_id: string | null
+          processor_type: string | null
+          project_id: string | null
+          rate_limit_per_minute: number | null
+          specialization: string | null
+          supported_formats: string[] | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          confidence_threshold?: number | null
+          configuration?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          display_name?: string | null
+          estimated_cost_per_page?: number | null
+          gcp_credentials?: never
+          gcp_credentials_encrypted?: string | null
+          gcp_service_account?: never
+          gcp_service_account_encrypted?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          location?: string | null
+          max_pages_per_document?: number | null
+          name?: string | null
+          priority?: number | null
+          processor_full_id?: string | null
+          processor_id?: string | null
+          processor_type?: string | null
+          project_id?: string | null
+          rate_limit_per_minute?: number | null
+          specialization?: string | null
+          supported_formats?: string[] | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          confidence_threshold?: number | null
+          configuration?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          display_name?: string | null
+          estimated_cost_per_page?: number | null
+          gcp_credentials?: never
+          gcp_credentials_encrypted?: string | null
+          gcp_service_account?: never
+          gcp_service_account_encrypted?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          location?: string | null
+          max_pages_per_document?: number | null
+          name?: string | null
+          priority?: number | null
+          processor_full_id?: string | null
+          processor_id?: string | null
+          processor_type?: string | null
+          project_id?: string | null
+          rate_limit_per_minute?: number | null
+          specialization?: string | null
+          supported_formats?: string[] | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       assign_user_role: {
-        Args:
-          | {
-              _department?: string
-              _expires_at?: string
-              _granted_by?: string
-              _role: string
-              _user_id: string
-            }
-          | {
-              _department?: string
-              _expires_at?: string
-              _granted_by?: string
-              _role: string
-              _user_id: string
-              _yacht_id?: string
-            }
+        Args: {
+          _department?: string
+          _expires_at?: string
+          _granted_by?: string
+          _role: string
+          _user_id: string
+        }
         Returns: boolean
       }
       check_user_permission: {
@@ -835,25 +1183,17 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      decrypt_api_key: {
+        Args: { encrypted_key: string }
+        Returns: string
+      }
+      encrypt_api_key: {
+        Args: { plain_key: string }
+        Returns: string
+      }
       ensure_user_role: {
         Args: { role_param?: string; user_id_param: string }
         Returns: undefined
-      }
-      get_user_profile: {
-        Args: { _user_id?: string }
-        Returns: {
-          avatar_url: string
-          department: string
-          display_name: string
-          email: string
-          is_superadmin: boolean
-          job_title: string
-          last_active_at: string
-          onboarding_completed: boolean
-          permissions: string[]
-          roles: string[]
-          user_id: string
-        }[]
       }
       get_user_roles: {
         Args: { _user_id?: string }
@@ -864,8 +1204,16 @@ export type Database = {
           role: string
         }[]
       }
+      is_encrypted: {
+        Args: { value: string }
+        Returns: boolean
+      }
       is_superadmin: {
         Args: Record<PropertyKey, never> | { _user_id?: string }
+        Returns: boolean
+      }
+      is_superadmin_by_email: {
+        Args: { user_id?: string }
         Returns: boolean
       }
       user_has_permission: {

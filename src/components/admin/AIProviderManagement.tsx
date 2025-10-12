@@ -129,7 +129,7 @@ export const AIProviderManagement: React.FC<AIProviderManagementProps> = ({ onSt
     try {
       // Load providers with Revolutionary error handling
       const { data: providersData, error: providersError } = await supabase
-        .from('ai_providers_unified')
+        .from('ai_providers_with_keys')
         .select('*')
         .order('name');
 

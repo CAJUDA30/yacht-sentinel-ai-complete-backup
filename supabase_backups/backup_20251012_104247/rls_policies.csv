@@ -1,0 +1,149 @@
+schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
+public,user_profiles,Users can view their own profile,PERMISSIVE,{public},SELECT,(auth.uid() = user_id),
+public,user_profiles,Users can update their own profile,PERMISSIVE,{public},UPDATE,(auth.uid() = user_id),
+public,user_profiles,Admins can view all profiles,PERMISSIVE,{public},SELECT,"user_has_permission('read'::text, 'users'::text, 'view_all'::text)",
+public,user_profiles,Admins can manage all profiles,PERMISSIVE,{public},ALL,"user_has_permission('write'::text, 'users'::text, 'manage_all'::text)",
+public,user_roles,Managers can view team roles,PERMISSIVE,{public},SELECT,"user_has_permission('read'::text, 'users'::text, 'view_team'::text)",
+public,user_roles,Admins can manage user roles,PERMISSIVE,{public},ALL,"user_has_permission('write'::text, 'roles'::text, 'assign_standard'::text)",
+public,role_permissions,All authenticated users can view permissions,PERMISSIVE,{authenticated},SELECT,true,
+public,role_permissions,Only superadmins can modify permissions,PERMISSIVE,{public},ALL,public.is_superadmin(),
+public,user_profiles,Service role full access - profiles,PERMISSIVE,{public},ALL,(auth.role() = 'service_role'::text),
+public,user_roles,Service role full access - roles,PERMISSIVE,{public},ALL,(auth.role() = 'service_role'::text),
+public,role_permissions,Service role full access - permissions,PERMISSIVE,{public},ALL,(auth.role() = 'service_role'::text),
+public,audit_workflows,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,audit_workflows,Authenticated write access,PERMISSIVE,{authenticated},INSERT,,true
+public,audit_workflows,Authenticated update access,PERMISSIVE,{authenticated},UPDATE,true,true
+public,ai_models_unified,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,ai_models_unified,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,ai_models_unified,Authenticated write access,PERMISSIVE,{authenticated},INSERT,,true
+public,ai_models_unified,Authenticated update access,PERMISSIVE,{authenticated},UPDATE,true,true
+public,inventory_items,Authenticated write access,PERMISSIVE,{authenticated},INSERT,,true
+public,inventory_items,Authenticated update access,PERMISSIVE,{authenticated},UPDATE,true,true
+public,audit_workflows,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,ai_system_config,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,ai_system_config,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,ai_system_config,Authenticated write access,PERMISSIVE,{authenticated},INSERT,,true
+public,ai_system_config,Authenticated update access,PERMISSIVE,{authenticated},UPDATE,true,true
+public,system_settings,Authenticated write access,PERMISSIVE,{authenticated},INSERT,,true
+public,system_settings,Authenticated update access,PERMISSIVE,{authenticated},UPDATE,true,true
+public,ai_providers_unified,service_role_full_access_ai_providers,PERMISSIVE,{service_role},ALL,true,true
+public,yachts,Owner full access,PERMISSIVE,{authenticated},ALL,(auth.uid() = owner_id),(auth.uid() = owner_id)
+public,yacht_profiles,Owner full access,PERMISSIVE,{authenticated},ALL,(auth.uid() = owner_id),(auth.uid() = owner_id)
+public,ai_health,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,ai_health,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,ai_provider_logs,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,ai_provider_logs,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,role_permissions,Service role can manage permissions,PERMISSIVE,{public},ALL,(auth.role() = 'service_role'::text),
+public,ai_provider_logs,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,analytics_events,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,analytics_events,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,analytics_events,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,edge_function_health,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,edge_function_health,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,edge_function_health,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,edge_function_settings,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,edge_function_settings,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,edge_function_settings,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,event_bus,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,event_bus,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,event_bus,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,llm_provider_models,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,llm_provider_models,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,llm_provider_models,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,unified_ai_configs,Service role full access,PERMISSIVE,{service_role},ALL,true,true
+public,unified_ai_configs,Authenticated read access,PERMISSIVE,{authenticated},SELECT,true,
+public,unified_ai_configs,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,user_roles,service_role_full_access,PERMISSIVE,{service_role},ALL,true,true
+public,ai_models_unified,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,user_roles,users_read_own_roles,PERMISSIVE,{authenticated},SELECT,(auth.uid() = user_id),
+public,user_roles,superadmin_full_access,PERMISSIVE,{authenticated},ALL,is_superadmin_by_email(auth.uid()),is_superadmin_by_email(auth.uid())
+public,ai_providers_unified,superadmin_full_access_ai_providers,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,ai_providers_unified,authenticated_read_access_ai_providers,PERMISSIVE,{authenticated},SELECT,true,
+public,ai_providers_unified,authenticated_insert_access_ai_providers,PERMISSIVE,{authenticated},INSERT,,true
+public,ai_providers_unified,authenticated_update_access_ai_providers,PERMISSIVE,{authenticated},UPDATE,true,true
+public,ai_system_config,Superadmin delete access,PERMISSIVE,{authenticated},DELETE,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))",
+public,ai_system_config,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,audit_workflows,Superadmin delete access,PERMISSIVE,{authenticated},DELETE,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))",
+public,audit_workflows,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,inventory_items,Yacht owner and superadmin delete access,PERMISSIVE,{authenticated},DELETE,"((yacht_id IN ( SELECT yachts.id
+   FROM yachts
+  WHERE (yachts.owner_id = auth.uid()))) OR (auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text))))",
+public,system_settings,service_role_full_access,PERMISSIVE,{service_role},ALL,true,true
+public,ai_models_unified,Superadmin delete access,PERMISSIVE,{authenticated},DELETE,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))",
+public,ai_health,Superadmin full access,PERMISSIVE,{authenticated},ALL,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))","(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))"
+public,ai_health,Authenticated insert access,PERMISSIVE,{authenticated},INSERT,,true
+public,ai_health,Authenticated update access,PERMISSIVE,{authenticated},UPDATE,true,true
+public,ai_health,Superadmin delete access,PERMISSIVE,{authenticated},DELETE,"(auth.uid() IN ( SELECT users.id
+   FROM auth.users
+  WHERE ((users.email)::text = 'superadmin@yachtexcel.com'::text)))",
+public,document_ai_processors,authenticated_read_document_ai_processors,PERMISSIVE,{authenticated},SELECT,true,
+public,system_settings,authenticated_read_access,PERMISSIVE,{authenticated},SELECT,true,
+public,system_settings,superadmin_full_access,PERMISSIVE,{authenticated},ALL,is_superadmin_by_email(auth.uid()),is_superadmin_by_email(auth.uid())
+public,ai_providers_unified,service_role_full_access,PERMISSIVE,{service_role},ALL,true,true
+public,ai_providers_unified,authenticated_read_access,PERMISSIVE,{authenticated},SELECT,true,
+public,ai_providers_unified,superadmin_full_access,PERMISSIVE,{authenticated},ALL,is_superadmin_by_email(auth.uid()),is_superadmin_by_email(auth.uid())
+public,inventory_items,service_role_full_access,PERMISSIVE,{service_role},ALL,true,true
+public,inventory_items,authenticated_read_access,PERMISSIVE,{authenticated},SELECT,true,
+public,inventory_items,superadmin_full_access,PERMISSIVE,{authenticated},ALL,is_superadmin_by_email(auth.uid()),is_superadmin_by_email(auth.uid())
+public,yachts,service_role_full_access,PERMISSIVE,{service_role},ALL,true,true
+public,yachts,authenticated_read_access,PERMISSIVE,{authenticated},SELECT,true,
+public,yachts,superadmin_full_access,PERMISSIVE,{authenticated},ALL,is_superadmin_by_email(auth.uid()),is_superadmin_by_email(auth.uid())
+public,yacht_profiles,service_role_full_access,PERMISSIVE,{service_role},ALL,true,true
+public,yacht_profiles,authenticated_read_access,PERMISSIVE,{authenticated},SELECT,true,
+public,yacht_profiles,superadmin_full_access,PERMISSIVE,{authenticated},ALL,is_superadmin_by_email(auth.uid()),is_superadmin_by_email(auth.uid())

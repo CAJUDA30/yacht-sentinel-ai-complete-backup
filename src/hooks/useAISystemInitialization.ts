@@ -45,7 +45,7 @@ export function useAISystemInitialization() {
         
         // Verify that provider configurations are properly loaded
         const { data: loadedProviders } = await supabase
-          .from('ai_providers_unified')
+          .from('ai_providers_with_keys')
           .select('id, name, config, is_active')
           .eq('is_active', true);
         

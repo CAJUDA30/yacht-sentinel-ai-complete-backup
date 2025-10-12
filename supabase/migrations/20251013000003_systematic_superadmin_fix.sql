@@ -130,15 +130,16 @@ CREATE POLICY "Service role can manage all roles"
     USING (auth.role() = 'service_role');
 
 -- 8. CRITICAL: Insert/Update superadmin role for the current user
-INSERT INTO public.user_roles (user_id, role, is_active, created_at)
+INSERT INTO public.user_roles (user_id, role, department, is_active, created_at)
 SELECT 
     id, 
     'superadmin', 
+    NULL,
     true, 
     NOW()
 FROM auth.users 
 WHERE email = 'superadmin@yachtexcel.com'
-ON CONFLICT (user_id, role) 
+ON CONFLICT (user_id, role, COALESCE(department, ''))
 DO UPDATE SET 
     is_active = true,
     updated_at = NOW();
@@ -152,9 +153,9 @@ AS $$
 BEGIN
     -- If user has superadmin email, ensure they have superadmin role
     IF NEW.email = 'superadmin@yachtexcel.com' THEN
-        INSERT INTO public.user_roles (user_id, role, is_active, created_at)
-        VALUES (NEW.id, 'superadmin', true, NOW())
-        ON CONFLICT (user_id, role) 
+        INSERT INTO public.user_roles (user_id, role, department, is_active, created_at)
+        VALUES (NEW.id, 'superadmin', NULL, true, NOW())
+        ON CONFLICT (user_id, role, COALESCE(department, ''))
         DO UPDATE SET 
             is_active = true,
             updated_at = NOW();

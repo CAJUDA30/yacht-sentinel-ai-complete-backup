@@ -22,6 +22,7 @@ import { getProviderApiKey } from '@/utils/encryption';
 import { AITableAutoSetup } from '@/services/aiTableAutoSetup';
 import { AIProviderAdapter } from '@/services/aiProviderAdapter';
 import ProcessorManagement from './ProcessorManagement';
+import EnhancedDocumentAIManager from './EnhancedDocumentAIManager';
 import { ProviderConfigurationModal } from './ProviderConfigurationModal';
 import { ProviderContextMenu } from './ProviderContextMenu';
 import { QuickEditModal } from './QuickEditModal';
@@ -467,7 +468,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
       
       // Verify the save by checking if the data was actually updated
       const { data: verifyData, error: verifyError } = await supabase
-        .from('ai_providers_unified')
+        .from('ai_providers_with_keys')
         .select('name, config, updated_at')
         .eq('id', updatedProvider.id)
         .single();
@@ -1888,7 +1889,7 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           </TabsContent>
 
           <TabsContent value="processors" className="space-y-6">
-            <ProcessorManagement />
+            <EnhancedDocumentAIManager />
           </TabsContent>
 
           <TabsContent value="models" className="space-y-6">

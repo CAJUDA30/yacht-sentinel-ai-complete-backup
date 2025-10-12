@@ -10,7 +10,7 @@ export function useAIProviderManagement() {
     queryKey: ["ai-providers"],
     queryFn: async (): Promise<AIProvider[]> => {
       const { data, error } = await supabase
-        .from('ai_providers_unified')
+        .from('ai_providers_with_keys')
         .select('*')
         .order('created_at', { ascending: false });
       

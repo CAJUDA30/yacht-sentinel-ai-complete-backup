@@ -8,8 +8,14 @@
 -- Drop existing triggers and functions that might conflict
 DROP TRIGGER IF EXISTS ensure_superadmin_role_trigger ON auth.users;
 DROP TRIGGER IF EXISTS handle_new_user_signup_trigger ON auth.users;
-DROP FUNCTION IF EXISTS public.ensure_superadmin_role();
-DROP FUNCTION IF EXISTS public.handle_new_user_signup();
+DROP FUNCTION IF EXISTS public.ensure_superadmin_role() CASCADE;
+DROP FUNCTION IF EXISTS public.handle_new_user_signup() CASCADE;
+DROP FUNCTION IF EXISTS public.get_user_roles(UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.user_has_permission(TEXT, TEXT, TEXT, UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.is_superadmin(UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.is_superadmin() CASCADE;
+DROP FUNCTION IF EXISTS public.assign_user_role(UUID, TEXT, UUID, TEXT, UUID, TIMESTAMPTZ) CASCADE;
+DROP FUNCTION IF EXISTS public.get_user_profile(UUID) CASCADE;
 
 -- =====================================================
 -- 2. ENHANCED USER PROFILES TABLE
@@ -54,6 +60,7 @@ CREATE TABLE public.user_roles (
 );
 
 -- Add unique constraint separately to handle NULL values properly
+DROP INDEX IF EXISTS idx_user_roles_unique;
 CREATE UNIQUE INDEX idx_user_roles_unique 
 ON public.user_roles (user_id, role, COALESCE(department, ''));
 
@@ -72,6 +79,7 @@ CREATE TABLE IF NOT EXISTS public.role_permissions (
 );
 
 -- Add unique constraint for role permissions
+DROP INDEX IF EXISTS idx_role_permissions_unique;
 CREATE UNIQUE INDEX idx_role_permissions_unique 
 ON public.role_permissions (role, permission, COALESCE(resource, ''), action);
 
@@ -370,7 +378,13 @@ DROP POLICY IF EXISTS "Admins can manage all profiles" ON public.user_profiles;
 DROP POLICY IF EXISTS "Users can view their own roles" ON public.user_roles;
 DROP POLICY IF EXISTS "Managers can view team roles" ON public.user_roles;
 DROP POLICY IF EXISTS "Admins can manage all roles" ON public.user_roles;
+DROP POLICY IF EXISTS "Admins can manage user roles" ON public.user_roles;
 DROP POLICY IF EXISTS "Superadmins can manage all roles" ON public.user_roles;
+DROP POLICY IF EXISTS "All authenticated users can view permissions" ON public.role_permissions;
+DROP POLICY IF EXISTS "Only superadmins can modify permissions" ON public.role_permissions;
+DROP POLICY IF EXISTS "Service role full access - profiles" ON public.user_profiles;
+DROP POLICY IF EXISTS "Service role full access - roles" ON public.user_roles;
+DROP POLICY IF EXISTS "Service role full access - permissions" ON public.role_permissions;
 
 -- User Profiles Policies
 CREATE POLICY "Users can view their own profile"
