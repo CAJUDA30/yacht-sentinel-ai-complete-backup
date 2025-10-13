@@ -403,6 +403,9 @@ export type Database = {
           id: string
           is_active: boolean | null
           is_primary: boolean | null
+          last_test_result: Json | null
+          last_test_status: string | null
+          last_tested_at: string | null
           location: string
           max_pages_per_document: number | null
           name: string
@@ -431,6 +434,9 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_primary?: boolean | null
+          last_test_result?: Json | null
+          last_test_status?: string | null
+          last_tested_at?: string | null
           location?: string
           max_pages_per_document?: number | null
           name: string
@@ -459,6 +465,9 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_primary?: boolean | null
+          last_test_result?: Json | null
+          last_test_status?: string | null
+          last_tested_at?: string | null
           location?: string
           max_pages_per_document?: number | null
           name?: string
@@ -1163,6 +1172,108 @@ export type Database = {
         }
         Relationships: []
       }
+      document_ai_processors_with_status: {
+        Row: {
+          accuracy: number | null
+          confidence_threshold: number | null
+          configuration: Json | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          display_name: string | null
+          estimated_cost_per_page: number | null
+          gcp_credentials_encrypted: string | null
+          gcp_service_account_encrypted: string | null
+          id: string | null
+          is_active: boolean | null
+          is_primary: boolean | null
+          last_test_result: Json | null
+          last_test_status: string | null
+          last_tested_at: string | null
+          location: string | null
+          max_pages_per_document: number | null
+          name: string | null
+          priority: number | null
+          processor_full_id: string | null
+          processor_id: string | null
+          processor_type: string | null
+          project_id: string | null
+          rate_limit_per_minute: number | null
+          specialization: string | null
+          status_summary: string | null
+          supported_formats: string[] | null
+          test_freshness: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          confidence_threshold?: number | null
+          configuration?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          display_name?: string | null
+          estimated_cost_per_page?: number | null
+          gcp_credentials_encrypted?: string | null
+          gcp_service_account_encrypted?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          last_test_result?: Json | null
+          last_test_status?: string | null
+          last_tested_at?: string | null
+          location?: string | null
+          max_pages_per_document?: number | null
+          name?: string | null
+          priority?: number | null
+          processor_full_id?: string | null
+          processor_id?: string | null
+          processor_type?: string | null
+          project_id?: string | null
+          rate_limit_per_minute?: number | null
+          specialization?: string | null
+          status_summary?: never
+          supported_formats?: string[] | null
+          test_freshness?: never
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          confidence_threshold?: number | null
+          configuration?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          display_name?: string | null
+          estimated_cost_per_page?: number | null
+          gcp_credentials_encrypted?: string | null
+          gcp_service_account_encrypted?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          last_test_result?: Json | null
+          last_test_status?: string | null
+          last_tested_at?: string | null
+          location?: string | null
+          max_pages_per_document?: number | null
+          name?: string | null
+          priority?: number | null
+          processor_full_id?: string | null
+          processor_id?: string | null
+          processor_type?: string | null
+          project_id?: string | null
+          rate_limit_per_minute?: number | null
+          specialization?: string | null
+          status_summary?: never
+          supported_formats?: string[] | null
+          test_freshness?: never
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       assign_user_role: {
@@ -1175,9 +1286,21 @@ export type Database = {
         }
         Returns: boolean
       }
+      check_user_creation_health: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          metric: string
+          status: string
+          value: number
+        }[]
+      }
       check_user_permission: {
         Args: { permission_name: string }
         Returns: boolean
+      }
+      cleanup_conflicting_rls_policies: {
+        Args: { p_table_name: string }
+        Returns: undefined
       }
       current_user_is_superadmin: {
         Args: Record<PropertyKey, never>
@@ -1190,6 +1313,10 @@ export type Database = {
       encrypt_api_key: {
         Args: { plain_key: string }
         Returns: string
+      }
+      enforce_standard_rls_policies: {
+        Args: { p_include_owner_access?: boolean; p_table_name: string }
+        Returns: undefined
       }
       ensure_user_role: {
         Args: { role_param?: string; user_id_param: string }
@@ -1212,10 +1339,6 @@ export type Database = {
         Args: Record<PropertyKey, never> | { _user_id?: string }
         Returns: boolean
       }
-      is_superadmin_by_email: {
-        Args: { user_id?: string }
-        Returns: boolean
-      }
       user_has_permission: {
         Args: {
           _action?: string
@@ -1224,6 +1347,10 @@ export type Database = {
           _user_id?: string
         }
         Returns: boolean
+      }
+      verify_rls_integrity: {
+        Args: { p_table_name: string }
+        Returns: Json
       }
     }
     Enums: {

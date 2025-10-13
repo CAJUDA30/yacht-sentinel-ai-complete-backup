@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { Button } from '@/components/ui/button';
@@ -105,20 +105,21 @@ const Auth = () => {
     }
   };
 
+  // Demo login function
   const handleDemoLogin = async () => {
     setLoading(true);
     setError('');
     
     // Superadmin credentials
     const demoEmail = 'superadmin@yachtexcel.com';
-    const demoPassword = 'admin123'; // Correct password
+    const demoPassword = 'superadmin123'; // Using the working password we confirmed
 
     try {
       // Use Master Auth System instead of direct supabase call
       const { error } = await signIn(demoEmail, demoPassword);
 
       if (error) {
-        setError('Please create the superadmin user first or use manual signup.');
+        setError('Demo login failed. Please try manual login.');
       } else {
         toast({
           title: "Welcome back!",
@@ -286,7 +287,7 @@ const Auth = () => {
               )}
             </Button>
             <p className="text-xs text-muted-foreground text-center mt-2">
-              Email: superadmin@yachtexcel.com | Password: admin123
+              Email: superadmin@yachtexcel.com | Password: superadmin123
             </p>
           </div>
         </CardContent>

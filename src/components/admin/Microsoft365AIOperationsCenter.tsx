@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { EnhancedProviderWizard } from './EnhancedProviderWizard';
 import { debugConsole, testProviderConnection } from '@/services/debugConsole';
-import { getProviderApiKey } from '@/utils/encryption';
+import { encryptApiKey, getProviderApiKey, storeProviderApiKey } from '@/utils/encryption';
 import { AITableAutoSetup } from '@/services/aiTableAutoSetup';
 import { AIProviderAdapter } from '@/services/aiProviderAdapter';
 import ProcessorManagement from './ProcessorManagement';
@@ -76,6 +76,9 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
     message: string;
     details?: any;
   }>>>({});
+  
+  // State to track dismissed debug consoles per provider
+  const [dismissedDebugConsoles, setDismissedDebugConsoles] = useState<Record<string, boolean>>({});
 
   const {
     providers,
@@ -319,25 +322,41 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         }
       };
       
+      // PROFESSIONAL: Get and validate API key with comprehensive error handling
       const { apiKey: decryptedApiKey, isValid: isApiKeyValid, error: apiKeyError } = await import('@/utils/encryption').then(m => m.getProviderApiKeySafe(provider));
       
-      if (!isApiKeyValid || !decryptedApiKey) {
-        const errorMsg = apiKeyError || 'API key validation failed - contains invalid characters or format';
+      // PROFESSIONAL: Log validation results for debugging
+      debugConsole.info('MODEL_TEST', `API key validation for ${normalizedModelName}`, {
+        hasApiKey: !!decryptedApiKey,
+        isValid: isApiKeyValid,
+        keyLength: decryptedApiKey?.length || 0,
+        validationError: apiKeyError || 'none',
+        model: normalizedModelName
+      }, provider.id, provider.name);
+      
+      // PROFESSIONAL: Only fail if key is completely missing or unusable
+      if (!decryptedApiKey) {
+        const errorMsg = 'API key is missing - configure in provider settings';
         addDebugLog(provider.id, 'error', `Model ${normalizedModelName}: ${errorMsg}`, {
           model: normalizedModelName,
-          hasProvider: !!provider,
-          hasConfig: !!provider.config,
-          hasConfiguration: !!provider.configuration,
-          sanitizationError: apiKeyError
+          reason: 'no_api_key_found'
         });
         
-        debugConsole.error('MODEL_TEST', `Model ${normalizedModelName}: API key validation failed`, {
+        debugConsole.error('MODEL_TEST', `Model ${normalizedModelName}: No API key`, {
           error: errorMsg,
-          model: normalizedModelName,
-          apiKeyLength: decryptedApiKey?.length || 0
+          model: normalizedModelName
         }, provider.id, provider.name);
         
         throw new Error(errorMsg);
+      }
+      
+      // PROFESSIONAL: Warn but continue if validation flags format issues
+      if (!isApiKeyValid && apiKeyError) {
+        debugConsole.warn('MODEL_TEST', `API key format warning for ${normalizedModelName}`, {
+          warning: apiKeyError,
+          model: normalizedModelName,
+          note: 'Attempting connection test anyway - API provider will determine validity'
+        }, provider.id, provider.name);
       }
       
       const startTime = Date.now();
@@ -506,34 +525,62 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         models_count: updatedProvider.configuration?.selected_models?.length || 0
       }, updatedProvider.id, updatedProvider.name);
 
-      // Ensure configuration is properly serialized
-      const configurationToSave = typeof updatedProvider.configuration === 'string' 
-        ? updatedProvider.configuration 
-        : JSON.stringify(updatedProvider.configuration || {});
+      // SYSTEMATIC SOLUTION: Use unified database-level encryption approach
+      // Extract API key - check both direct property and config field for backwards compatibility
+      const configData = updatedProvider.configuration || updatedProvider.config || {};
+      const plainApiKey = updatedProvider.api_key || configData.api_key;
+      
+      // Clean configuration - remove API key from config JSONB field
+      const cleanConfig = { ...configData };
+      delete cleanConfig.api_key;
+      
+      const configurationToSave = typeof cleanConfig === 'string' 
+        ? cleanConfig 
+        : JSON.stringify(cleanConfig);
+
+      debugConsole.info('PROVIDER_SAVE', 'Using unified database-level encryption approach', {
+        has_api_key: !!plainApiKey,
+        api_key_source: updatedProvider.api_key ? 'direct_property' : (configData.api_key ? 'config_field_legacy' : 'none'),
+        config_size: configurationToSave.length,
+        config_has_no_sensitive_data: !cleanConfig.api_key,
+        selected_models_count: cleanConfig.selected_models?.length || 0,
+        approach: 'database_level_encryption',
+        systematic_fix_applied: true
+      }, updatedProvider.id, updatedProvider.name);
+
+      // Update using unified approach: api_key_encrypted field + clean config
+      const updateData: any = {
+        name: updatedProvider.name,
+        provider_type: updatedProvider.provider_type,
+        is_active: updatedProvider.is_active,
+        api_endpoint: updatedProvider.api_endpoint,
+        config: configurationToSave,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Only update API key if provided (database trigger handles encryption)
+      if (plainApiKey) {
+        updateData.api_key_encrypted = plainApiKey;
+      }
 
       const { error } = await supabase
         .from('ai_providers_unified')
-        .update({
-          name: updatedProvider.name,
-          provider_type: updatedProvider.provider_type,
-          is_active: updatedProvider.is_active,
-          api_endpoint: updatedProvider.api_endpoint,
-          config: configurationToSave,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', updatedProvider.id);
 
       if (error) {
         debugConsole.error('PROVIDER_SAVE', `Failed to save provider: ${error.message}`, {
           error_code: error.code,
-          error_details: error.details
+          error_details: error.details,
+          error_hint: error.hint
         }, updatedProvider.id, updatedProvider.name);
         throw error;
       }
       
-      debugConsole.success('PROVIDER_SAVE', `Provider saved successfully: ${updatedProvider.name}`, {
+      debugConsole.success('PROVIDER_SAVE', `Provider database update successful: ${updatedProvider.name}`, {
         provider_id: updatedProvider.id,
-        configuration_size: configurationToSave.length
+        configuration_size: configurationToSave.length,
+        config_has_api_key: !!(configData.api_key)
       }, updatedProvider.id, updatedProvider.name);
       
       // **CRITICAL BUSINESS REQUIREMENT**: Automatically integrate cost tracking
@@ -569,12 +616,30 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
           ? JSON.parse(verifyData.config) 
           : verifyData.config;
         
-        debugConsole.success('PROVIDER_SAVE', 'Save verification completed', {
+        debugConsole.success('PROVIDER_SAVE', 'Save verification completed - data persisted to database', {
           name_matches: verifyData.name === updatedProvider.name,
           config_size: JSON.stringify(savedConfig || {}).length,
           models_preserved: savedConfig?.selected_models?.length || 0,
-          last_updated: verifyData.updated_at
+          api_key_saved: !!(savedConfig?.api_key),
+          api_key_encrypted: savedConfig?.api_key && !savedConfig.api_key.startsWith('PLAIN:'),
+          last_updated: verifyData.updated_at,
+          verification_passed: true
         }, updatedProvider.id, updatedProvider.name);
+        
+        // Additional check: Verify API key was actually saved
+        if (configData.api_key && !savedConfig?.api_key) {
+          debugConsole.error('PROVIDER_SAVE', 'CRITICAL: API key was in update but not in saved data!', {
+            had_api_key_in_update: !!configData.api_key,
+            has_api_key_in_db: !!savedConfig?.api_key
+          }, updatedProvider.id, updatedProvider.name);
+          
+          toast({
+            title: '⚠️ Save Warning',
+            description: 'Provider saved but API key may not have persisted. Please verify and re-save if needed.',
+            variant: 'destructive',
+            duration: 8000
+          });
+        }
       }
       
       toast({
@@ -786,90 +851,207 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
         }
       ].slice(-20) // Keep only last 20 logs
     }));
+    
+    // Reset dismissed state when new errors occur so console reappears
+    if (level === 'error' || level === 'warning') {
+      setDismissedDebugConsoles(prev => ({
+        ...prev,
+        [providerId]: false
+      }));
+    }
   };
 
-  // Enhanced provider health checking function with unified endpoint detection
+  // PROFESSIONAL: Enhanced provider health checking with robust endpoint validation
   const checkProviderHealth = async (provider: any, silent: boolean = false) => {
     const providerId = provider.id;
     setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'checking' }));
     
     try {
-      debugConsole.info('PROVIDER_HEALTH', `Starting enhanced health check for ${provider.name}`, {
+      debugConsole.info('PROVIDER_HEALTH', `Starting comprehensive health check for ${provider.name}`, {
         provider_type: provider.provider_type,
         has_config: !!provider.config,
         has_configuration: !!provider.configuration
       }, provider.id, provider.name);
       
-      // Enhanced API key detection with multiple fallback locations
-      const hasApiKey = !!(provider.config?.api_key || 
-                          provider.configuration?.api_key || 
-                          provider.api_key);
+      // PROFESSIONAL: Multi-tier endpoint detection with comprehensive fallback chain
+      const config = provider.config || provider.configuration || {};
       
-      // Enhanced endpoint detection with fallback priority
-      const apiEndpoint = provider.api_endpoint || 
-                         provider.config?.api_endpoint || 
-                         provider.configuration?.api_endpoint;
+      // Tier 1: Direct provider properties (highest priority)
+      let apiEndpoint = provider.api_endpoint;
       
-      // Determine provider status based on configuration completeness
-      if (!hasApiKey || !apiEndpoint) {
-        const missingComponents = [];
-        if (!hasApiKey) missingComponents.push('API Key');
-        if (!apiEndpoint) missingComponents.push('API Endpoint');
-        
+      // Tier 2: Configuration object fallbacks
+      if (!apiEndpoint) {
+        apiEndpoint = config.api_endpoint || config.endpoint || config.baseURL || config.base_url;
+      }
+      
+      // Tier 3: Provider-specific endpoint patterns
+      if (!apiEndpoint && provider.provider_type) {
+        const defaultEndpoints = {
+          'openai': 'https://api.openai.com/v1',
+          'grok': 'https://api.x.ai/v1',
+          'deepseek': 'https://api.deepseek.com',
+          'gemini': 'https://generativelanguage.googleapis.com/v1beta',
+          'anthropic': 'https://api.anthropic.com/v1'
+        };
+        apiEndpoint = defaultEndpoints[provider.provider_type.toLowerCase()];
+      }
+      
+      // PROFESSIONAL: Multi-source API key detection
+      const hasApiKey = !!(
+        provider.api_key || 
+        provider.config?.api_key || 
+        provider.configuration?.api_key ||
+        config.api_key ||
+        config.key ||
+        config.apiKey
+      );
+      
+      debugConsole.info('PROVIDER_HEALTH', `Configuration analysis for ${provider.name}`, {
+        found_endpoint: !!apiEndpoint,
+        endpoint_source: apiEndpoint ? 'detected' : 'missing',
+        endpoint_value: apiEndpoint || 'NOT_FOUND',
+        has_api_key: hasApiKey,
+        provider_configured: hasApiKey && !!apiEndpoint
+      }, provider.id, provider.name);
+      
+      // PROFESSIONAL: Only flag as needing configuration if truly missing essentials
+      if (!hasApiKey && !apiEndpoint) {
         setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'needs_configuration' }));
         
-        addDebugLog(provider.id, 'warning', `Provider configuration incomplete: Missing ${missingComponents.join(', ')}`, {
-          missing_components: missingComponents,
-          has_api_key: hasApiKey,
-          has_endpoint: !!apiEndpoint
+        addDebugLog(provider.id, 'info', 'Provider not configured - both API key and endpoint missing', {
+          configuration_status: 'incomplete',
+          missing_api_key: !hasApiKey,
+          missing_endpoint: !apiEndpoint,
+          note: 'Configure in AI Settings to enable health checks'
         });
         
-        debugConsole.warn('PROVIDER_HEALTH', `Provider ${provider.name} needs configuration`, {
-          missing_components: missingComponents
+        // Use INFO level instead of WARN for incomplete configuration
+        debugConsole.info('PROVIDER_HEALTH', `Provider ${provider.name} requires configuration`, {
+          missing_components: ['API Key', 'Endpoint'],
+          action_required: 'Configure in AI Settings'
         }, provider.id, provider.name);
         
         if (!silent) {
           toast({
-            title: '⚠️ Configuration Incomplete',
-            description: `${provider.name} is missing: ${missingComponents.join(', ')}`,
-            variant: 'destructive',
-            duration: 6000
+            title: 'ℹ️ Configuration Required',
+            description: `${provider.name} needs API key and endpoint configuration`,
+            duration: 4000
           });
         }
         return;
       }
       
-      // If configuration is complete, test the connection
+      // PROFESSIONAL: Partial configuration handling
+      if (!hasApiKey) {
+        setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'needs_configuration' }));
+        
+        debugConsole.info('PROVIDER_HEALTH', `Provider ${provider.name} needs API key`, {
+          has_endpoint: !!apiEndpoint,
+          missing: 'API Key'
+        }, provider.id, provider.name);
+        
+        if (!silent) {
+          toast({
+            title: 'ℹ️ API Key Required',
+            description: `${provider.name} endpoint found, but API key is missing`,
+            duration: 4000
+          });
+        }
+        return;
+      }
+      
+      if (!apiEndpoint) {
+        setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'needs_configuration' }));
+        
+        debugConsole.info('PROVIDER_HEALTH', `Provider ${provider.name} needs endpoint`, {
+          has_api_key: hasApiKey,
+          missing: 'API Endpoint'
+        }, provider.id, provider.name);
+        
+        if (!silent) {
+          toast({
+            title: 'ℹ️ Endpoint Required',
+            description: `${provider.name} API key found, but endpoint is missing`,
+            duration: 4000
+          });
+        }
+        return;
+      }
+      
+      // PROFESSIONAL: Full configuration detected - test connection
+      debugConsole.info('PROVIDER_HEALTH', `Provider ${provider.name} fully configured - testing connection`, {
+        endpoint: apiEndpoint,
+        has_api_key: hasApiKey
+      }, provider.id, provider.name);
+      
+      // PROFESSIONAL: Decrypt and test API key
       const decryptedApiKey = await getProviderApiKey(provider);
       
       if (!decryptedApiKey) {
         setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'unhealthy' }));
         addDebugLog(provider.id, 'error', 'Failed to decrypt API key', {
-          error: 'API key decryption failed'
-        });
-        return;
-      }
-      
-      const result = await testProviderConnection(provider, decryptedApiKey);
-      
-      if (result.success) {
-        setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'healthy' }));
-        addDebugLog(provider.id, 'success', `Provider health check passed`, {
-          latency: result.latency
+          error: 'API key decryption failed',
+          troubleshooting: 'Check encryption service and key storage'
         });
         
         if (!silent) {
           toast({
+            title: '❌ Decryption Error',
+            description: `Unable to decrypt API key for ${provider.name}`,
+            variant: 'destructive',
+            duration: 5000
+          });
+        }
+        return;
+      }
+      
+      // PROFESSIONAL: Create test provider with validated configuration
+      const testProvider = {
+        ...provider,
+        api_endpoint: apiEndpoint,
+        config: {
+          ...config,
+          api_endpoint: apiEndpoint
+        }
+      };
+      
+      // PROFESSIONAL: Execute connection test with comprehensive error handling
+      const result = await testProviderConnection(testProvider, decryptedApiKey);
+      
+      if (result.success) {
+        setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'healthy' }));
+        addDebugLog(provider.id, 'success', `Provider health check passed`, {
+          latency: result.latency,
+          endpoint: apiEndpoint,
+          response_time: `${result.latency}ms`
+        });
+        
+        debugConsole.success('PROVIDER_HEALTH', `${provider.name} connection successful`, {
+          endpoint: apiEndpoint,
+          latency: result.latency,
+          status: 'healthy'
+        }, provider.id, provider.name);
+        
+        if (!silent) {
+          toast({
             title: '✅ Provider Healthy',
-            description: `${provider.name} is working properly`,
+            description: `${provider.name} is working properly (${result.latency}ms)`,
             duration: 3000
           });
         }
       } else {
         setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'unhealthy' }));
         addDebugLog(provider.id, 'error', `Provider health check failed`, {
-          error: result.error
+          error: result.error,
+          endpoint: apiEndpoint,
+          troubleshooting: 'Check API key validity and endpoint accessibility'
         });
+        
+        debugConsole.error('PROVIDER_HEALTH', `${provider.name} connection failed`, {
+          endpoint: apiEndpoint,
+          error: result.error,
+          status: 'unhealthy'
+        }, provider.id, provider.name);
         
         if (!silent) {
           toast({
@@ -883,15 +1065,23 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
       
     } catch (error: any) {
       setProviderHealthStatus(prev => ({ ...prev, [providerId]: 'unhealthy' }));
-      addDebugLog(provider.id, 'error', `Health check error: ${error.message}`, {
-        error: error.message
+      addDebugLog(provider.id, 'error', `Health check system error: ${error.message}`, {
+        error: error.message,
+        stack: error.stack,
+        troubleshooting: 'Check system connectivity and service availability'
       });
+      
+      debugConsole.error('PROVIDER_HEALTH', `System error during ${provider.name} health check`, {
+        error: error.message,
+        type: error.constructor.name
+      }, provider.id, provider.name);
       
       if (!silent) {
         toast({
           title: '❌ Health Check Error',
-          description: error.message,
-          variant: 'destructive'
+          description: `System error: ${error.message}`,
+          variant: 'destructive',
+          duration: 5000
         });
       }
     }
@@ -1039,78 +1229,244 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
       });
     }
   };
+  // PROFESSIONAL: Optimized health checks with comprehensive validation and smart delays
   useEffect(() => {
     if (providers.data && providers.data.length > 0) {
-      providers.data.forEach(provider => {
-        if (provider.is_active) {
-          // Check provider health
-          checkProviderHealth(provider);
-          
-          // Check individual model health
-          const config = provider.config as any;
-          const selectedModels = config?.selected_models || [];
-          const discoveredModels = config?.discovered_models || [];
-          const allModels = [...new Set([
-            ...selectedModels.map(m => typeof m === 'string' ? m : (m?.id || m?.name || String(m))),
-            ...discoveredModels.map(m => typeof m === 'string' ? m : (m?.id || m?.name || String(m)))
-          ])].filter(Boolean);
-          
-          // Test each model silently
-          allModels.forEach(modelName => {
+      // PROFESSIONAL: Extended delay for complete data hydration and system readiness
+      const healthCheckDelay = setTimeout(() => {
+        debugConsole.info('PROVIDER_HEALTH', `Initiating health checks for ${providers.data.length} providers after system stabilization`);
+        
+        let configuredProviders = 0;
+        let unconfiguredProviders = 0;
+        
+        providers.data.forEach((provider, index) => {
+          if (provider.is_active) {
             setTimeout(() => {
-              testIndividualModel(provider, modelName, true);
-            }, Math.random() * 2000); // Stagger requests to avoid rate limiting
+              // PROFESSIONAL: Comprehensive configuration validation
+              const providerData = provider as any;
+              const config = providerData.config || providerData.configuration || {};
+              
+              // Multi-tier validation with detailed logging
+              const hasApiKey = !!(
+                providerData.api_key || 
+                config.api_key || 
+                config.key ||
+                config.apiKey
+              );
+              
+              const hasEndpoint = !!(
+                providerData.api_endpoint ||
+                config.api_endpoint ||
+                config.endpoint ||
+                config.baseURL ||
+                config.base_url ||
+                // Provider-specific defaults
+                (provider.provider_type && ['openai', 'grok', 'deepseek', 'gemini', 'anthropic'].includes(provider.provider_type.toLowerCase()))
+              );
+              
+              debugConsole.info('PROVIDER_HEALTH', `Configuration validation for ${provider.name}`, {
+                provider_type: provider.provider_type,
+                has_api_key: hasApiKey,
+                has_endpoint: hasEndpoint,
+                config_completeness: hasApiKey && hasEndpoint ? 'complete' : 'partial',
+                validation_passed: hasApiKey && hasEndpoint
+              }, provider.id, provider.name);
+              
+              // PROFESSIONAL: Only run health checks on fully configured providers
+              if (hasApiKey && hasEndpoint) {
+                configuredProviders++;
+                debugConsole.info('PROVIDER_HEALTH', `Running health check for configured provider: ${provider.name}`);
+                checkProviderHealth(provider, true); // Silent mode for initial checks
+                
+                // PROFESSIONAL: Smart model testing with rate limiting
+                const selectedModels = config?.selected_models || [];
+                const discoveredModels = config?.discovered_models || [];
+                const allModels = [...new Set([
+                  ...selectedModels.map(m => typeof m === 'string' ? m : (m?.id || m?.name || String(m))),
+                  ...discoveredModels.map(m => typeof m === 'string' ? m : (m?.id || m?.name || String(m)))
+                ])].filter(Boolean);
+                
+                // Test up to 3 models maximum to prevent API rate limiting
+                const modelsToTest = allModels.slice(0, 3);
+                
+                modelsToTest.forEach((modelName, modelIndex) => {
+                  setTimeout(() => {
+                    testIndividualModel(provider, modelName, true);
+                  }, (modelIndex + 1) * 1500); // Increased stagger to 1.5s per model
+                });
+                
+                if (allModels.length > 3) {
+                  debugConsole.info('PROVIDER_HEALTH', `Limited model testing for ${provider.name} (${modelsToTest.length}/${allModels.length} models)`, {
+                    reason: 'Rate limit protection',
+                    tested_models: modelsToTest,
+                    total_models: allModels.length
+                  });
+                }
+              } else {
+                unconfiguredProviders++;
+                // Use INFO level instead of WARN - this is expected in development
+                debugConsole.info('PROVIDER_HEALTH', `Skipping health check for ${provider.name} - configuration incomplete`, {
+                  has_api_key: hasApiKey,
+                  has_endpoint: hasEndpoint,
+                  status: 'awaiting_configuration',
+                  note: 'Expected during initial setup - configure in AI Settings when ready'
+                });
+                
+                // Set appropriate status without triggering warnings
+                setProviderHealthStatus(prev => ({ ...prev, [provider.id]: 'needs_configuration' }));
+              }
+            }, index * 600); // Increased stagger to 600ms per provider for system stability
+          }
+        });
+        
+        // PROFESSIONAL: System-level health summary after all checks
+        setTimeout(() => {
+          debugConsole.info('PROVIDER_HEALTH', 'Initial health check cycle completed', {
+            total_providers: providers.data.length,
+            configured_providers: configuredProviders,
+            unconfigured_providers: unconfiguredProviders,
+            completion_time: new Date().toISOString()
           });
-        }
-      });
+        }, providers.data.length * 600 + 2000);
+        
+      }, 3000); // Increased delay to 3 seconds for complete system stabilization
+      
+      return () => clearTimeout(healthCheckDelay);
     }
   }, [providers.data]);
 
-  // Auto-refresh health status every 5 minutes (optimized)
+  // PROFESSIONAL: Optimized auto-refresh with intelligent validation and rate limiting
   useEffect(() => {
     const interval = setInterval(() => {
       if (providers.data && providers.data.length > 0) {
-        providers.data.forEach(provider => {
+        debugConsole.info('PROVIDER_HEALTH', 'Starting periodic health check cycle', {
+          provider_count: providers.data.length,
+          check_type: 'automated_periodic'
+        });
+        
+        let checksScheduled = 0;
+        
+        providers.data.forEach((provider, index) => {
           if (provider.is_active) {
-            checkProviderHealth(provider);
+            // PROFESSIONAL: Comprehensive validation before periodic checks
+            const providerData = provider as any;
+            const config = providerData.config || providerData.configuration || {};
             
-            // Only test the primary selected model to avoid excessive API calls
-            const config = provider.config as any;
-            const primaryModel = config?.selected_model;
+            const hasApiKey = !!(
+              providerData.api_key ||
+              config.api_key ||
+              config.key ||
+              config.apiKey
+            );
             
-            if (primaryModel) {
+            const hasEndpoint = !!(
+              providerData.api_endpoint ||
+              config.api_endpoint ||
+              config.endpoint ||
+              config.baseURL ||
+              config.base_url ||
+              (provider.provider_type && ['openai', 'grok', 'deepseek', 'gemini', 'anthropic'].includes(provider.provider_type.toLowerCase()))
+            );
+            
+            // PROFESSIONAL: Only run periodic checks on fully configured providers
+            if (hasApiKey && hasEndpoint) {
+              checksScheduled++;
+              
+              // Stagger periodic checks to prevent API rate limiting
               setTimeout(() => {
-                testIndividualModel(provider, primaryModel, true);
-              }, Math.random() * 2000); // Stagger randomly up to 2 seconds
+                checkProviderHealth(provider, true); // Silent mode for periodic checks
+                
+                // PROFESSIONAL: Limited model testing during periodic checks
+                // Only test the primary selected model to minimize API usage
+                const primaryModel = config?.selected_model || config?.selected_models?.[0];
+                
+                if (primaryModel) {
+                  setTimeout(() => {
+                    testIndividualModel(provider, primaryModel, true);
+                  }, Math.random() * 3000); // Random stagger up to 3 seconds
+                }
+              }, index * 800); // Increased stagger to 800ms for system stability
             }
           }
         });
+        
+        if (checksScheduled > 0) {
+          debugConsole.info('PROVIDER_HEALTH', `Periodic health checks scheduled`, {
+            checks_scheduled: checksScheduled,
+            total_providers: providers.data.length,
+            next_check_in: '5 minutes'
+          });
+        }
       }
     }, 5 * 60 * 1000); // 5 minutes
 
     return () => clearInterval(interval);
   }, [providers.data]);
 
-  // IMPORTANT: Check health when switching to providers tab (optimized)
+  // PROFESSIONAL: Smart health checks on tab activation with comprehensive validation
   useEffect(() => {
     if (activeTab === 'providers' && providers.data && providers.data.length > 0) {
-      console.log('[Health Check] Providers tab activated - running health checks');
-      providers.data.forEach(provider => {
+      debugConsole.info('PROVIDER_HEALTH', 'Providers tab activated - initiating focused health checks', {
+        provider_count: providers.data.length,
+        check_trigger: 'tab_activation'
+      });
+      
+      let activatedChecks = 0;
+      
+      providers.data.forEach((provider, index) => {
         if (provider.is_active) {
-          // Check provider health immediately
-          checkProviderHealth(provider);
-          
-          // Only test the primary selected model to avoid excessive API calls
-          const config = provider.config as any;
-          const primaryModel = config?.selected_model;
-          
-          if (primaryModel) {
-            setTimeout(() => {
-              testIndividualModel(provider, primaryModel, true);
-            }, 1000); // Small delay
-          }
+          setTimeout(() => {
+            // PROFESSIONAL: Comprehensive configuration validation for tab activation
+            const providerData = provider as any;
+            const config = providerData.config || providerData.configuration || {};
+            
+            const hasApiKey = !!(
+              providerData.api_key ||
+              config.api_key ||
+              config.key ||
+              config.apiKey
+            );
+            
+            const hasEndpoint = !!(
+              providerData.api_endpoint ||
+              config.api_endpoint ||
+              config.endpoint ||
+              config.baseURL ||
+              config.base_url ||
+              (provider.provider_type && ['openai', 'grok', 'deepseek', 'gemini', 'anthropic'].includes(provider.provider_type.toLowerCase()))
+            );
+            
+            if (hasApiKey && hasEndpoint) {
+              activatedChecks++;
+              checkProviderHealth(provider, true); // Silent mode for tab activation
+              
+              // PROFESSIONAL: Quick model validation on tab activation
+              const primaryModel = config?.selected_model || config?.selected_models?.[0];
+              
+              if (primaryModel) {
+                setTimeout(() => {
+                  testIndividualModel(provider, primaryModel, true);
+                }, 1200); // Small delay for model test
+              }
+            } else {
+              debugConsole.info('PROVIDER_HEALTH', `Provider ${provider.name} requires configuration`, {
+                has_api_key: hasApiKey,
+                has_endpoint: hasEndpoint,
+                status: 'configuration_needed',
+                tab_context: 'activation_check'
+              });
+            }
+          }, index * 400); // Optimized 400ms stagger for smooth UI experience
         }
       });
+      
+      // Log summary after all checks are scheduled
+      setTimeout(() => {
+        debugConsole.info('PROVIDER_HEALTH', 'Tab activation health checks completed', {
+          activated_checks: activatedChecks,
+          total_providers: providers.data.length
+        });
+      }, providers.data.length * 400 + 500);
     }
   }, [activeTab, providers.data]);
 
@@ -1194,14 +1550,19 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
             onClose={() => setShowAddProvider(false)}
             onProviderCreate={async (providerData: any) => {
               try {
-                debugConsole.info('PROVIDER_CREATE', 'Starting provider creation', {
+                debugConsole.info('PROVIDER_CREATE', 'Starting provider creation with database-level encryption', {
                   name: providerData.name,
                   provider_type: providerData.provider_type,
-                  has_api_key: !!(providerData.configuration?.api_key),
+                  has_api_key_direct: !!providerData.api_key,
+                  has_api_key_in_config: !!providerData.configuration?.api_key,
                   models_count: providerData.configuration?.selected_models?.length || 0
                 });
                 
-                // Build the complete provider data with BOTH root-level and config fields
+                // SYSTEMATIC SOLUTION: Use unified database-level encryption approach
+                // Check both direct property and config field for API key (backwards compatibility)
+                const plainApiKey = providerData.api_key || providerData.configuration?.api_key;
+                
+                // Build the complete provider data using the intended database pattern
                 const insertData = {
                   // Root-level fields (database columns)
                   name: providerData.name,
@@ -1212,13 +1573,12 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                   capabilities: providerData.capabilities || [],
                   description: providerData.configuration?.description || '',
                   
-                  // config JSONB field - store ALL configuration including API key
+                  // UNIFIED ENCRYPTION: Store plain API key in api_key_encrypted field
+                  // Database trigger automatically encrypts before storage
+                  api_key_encrypted: plainApiKey || null,
+                  
+                  // config JSONB field - CLEAN configuration (no sensitive data)
                   config: {
-                    // Core API settings - CRITICAL for connections
-                    api_endpoint: providerData.configuration?.api_endpoint || providerData.api_endpoint,
-                    api_key: providerData.configuration?.api_key || providerData.api_key, // MUST save this!
-                    auth_method: providerData.auth_method || providerData.configuration?.auth_method || 'api_key',
-                    
                     // Model configuration - CRITICAL for displaying and using models
                     selected_models: providerData.configuration?.selected_models || [],
                     selected_model: providerData.configuration?.selected_model,
@@ -1245,14 +1605,17 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                     wizard_version: '2.0',
                     created_via_wizard: true,
                     setup_timestamp: new Date().toISOString()
+                    // NOTE: No api_key here - stored separately in encrypted field
                   }
                 };
 
-                debugConsole.info('PROVIDER_CREATE', 'Provider data prepared', {
-                  root_fields: Object.keys(insertData).filter(k => k !== 'config'),
-                  config_fields: Object.keys(insertData.config),
-                  has_api_key_in_config: !!insertData.config.api_key,
-                  selected_models_count: insertData.config.selected_models?.length || 0
+                debugConsole.info('PROVIDER_CREATE', 'Using unified database-level encryption approach', {
+                  has_api_key_encrypted: !!insertData.api_key_encrypted,
+                  api_key_source: providerData.api_key ? 'direct_property' : (providerData.configuration?.api_key ? 'config_field_legacy' : 'none'),
+                  config_has_no_sensitive_data: true, // Config is now clean - no API keys
+                  selected_models_count: insertData.config.selected_models?.length || 0,
+                  approach: 'database_level_encryption',
+                  systematic_fix_applied: true
                 });
                 
                 // Insert into database - trigger will sync config to configuration
@@ -1378,6 +1741,44 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                   has_config: !!data[0]?.config,
                   models_count: (data[0]?.config as any)?.selected_models?.length || 0
                 });
+                
+                // CRITICAL DEBUG: Verify what was actually saved to the database
+                debugConsole.info('PROVIDER_CREATE', 'Verifying database save immediately after creation', {
+                  provider_id: data[0]?.id,
+                  checking_encryption: true
+                });
+                
+                // Query the view to see what API key is returned
+                const { data: verifyData, error: verifyError } = await supabase
+                  .from('ai_providers_with_keys')
+                  .select('id, name, api_key, config')
+                  .eq('id', data[0]?.id)
+                  .single();
+                
+                if (verifyError) {
+                  debugConsole.error('PROVIDER_CREATE', 'Failed to verify saved provider', {
+                    error: verifyError.message
+                  });
+                } else {
+                  const configData = typeof verifyData.config === 'string' ? JSON.parse(verifyData.config) : verifyData.config;
+                  debugConsole.info('PROVIDER_CREATE', 'Database verification completed', {
+                    api_key_from_view: verifyData.api_key?.substring(0, 10) + '...',
+                    api_key_length: verifyData.api_key?.length,
+                    api_key_matches_input: verifyData.api_key === plainApiKey,
+                    config_has_api_key: !!(configData?.api_key),
+                    config_api_key_preview: configData?.api_key?.substring(0, 10) || 'none',
+                    CRITICAL: configData?.api_key ? 'API KEY FOUND IN CONFIG - THIS IS WRONG!' : 'Config is clean - CORRECT'
+                  });
+                  
+                  if (configData?.api_key) {
+                    debugConsole.error('PROVIDER_CREATE', '🚨 CRITICAL BUG: API key found in config field after save!', {
+                      this_should_not_happen: true,
+                      config_api_key: configData.api_key.substring(0, 10) + '...',
+                      expected: 'Config should be clean, API key only in api_key_encrypted field',
+                      action_needed: 'Check database triggers and migration'
+                    });
+                  }
+                }
                 
                 // Refresh providers to show the new one
                 await refetchProviders();
@@ -1852,8 +2253,10 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                           )}
                         </div>
                         
-                        {/* Debug Console Section - Only show when connection fails */}
-                        {(providerHealthStatus[provider.id] === 'unhealthy' || hasHealthIssues) && providerDebugLogs[provider.id]?.length > 0 && (
+                        {/* Debug Console Section - Only show when connection fails and not dismissed */}
+                        {(providerHealthStatus[provider.id] === 'unhealthy' || hasHealthIssues) && 
+                         providerDebugLogs[provider.id]?.length > 0 && 
+                         !dismissedDebugConsoles[provider.id] && (
                           <div className="border-t border-red-200 pt-3 mt-3">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
@@ -1863,27 +2266,48 @@ export const Microsoft365AIOperationsCenter: React.FC<MS365AIOperationsCenterPro
                                   {providerDebugLogs[provider.id].filter(log => log.level === 'error').length} errors
                                 </Badge>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  const logs = providerDebugLogs[provider.id];
-                                  const logText = logs.map(log => {
-                                    const details = log.details ? JSON.stringify(log.details, null, 2) : '';
-                                    return `[${new Date(log.timestamp).toLocaleTimeString()}] ${log.level.toUpperCase()}: ${log.message}${details ? '\n' + details : ''}`;
-                                  }).join('\n\n');
-                                  navigator.clipboard.writeText(logText);
-                                  toast({
-                                    title: '✅ Copied to Clipboard',
-                                    description: 'Debug logs copied successfully',
-                                    duration: 2000
-                                  });
-                                }}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <Copy className="w-3 h-3 mr-1" />
-                                Copy
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const logs = providerDebugLogs[provider.id];
+                                    const logText = logs.map(log => {
+                                      const details = log.details ? JSON.stringify(log.details, null, 2) : '';
+                                      return `[${new Date(log.timestamp).toLocaleTimeString()}] ${log.level.toUpperCase()}: ${log.message}${details ? '\n' + details : ''}`;
+                                    }).join('\n\n');
+                                    navigator.clipboard.writeText(logText);
+                                    toast({
+                                      title: '✅ Copied to Clipboard',
+                                      description: 'Debug logs copied successfully',
+                                      duration: 2000
+                                    });
+                                  }}
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  <Copy className="w-3 h-3 mr-1" />
+                                  Copy
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setDismissedDebugConsoles(prev => ({
+                                      ...prev,
+                                      [provider.id]: true
+                                    }));
+                                    toast({
+                                      title: 'Debug Console Hidden',
+                                      description: 'Console will reappear if new errors occur',
+                                      duration: 2000
+                                    });
+                                  }}
+                                  className="h-6 px-2 text-xs hover:bg-red-100"
+                                  title="Hide debug console"
+                                >
+                                  <XCircle className="w-3 h-3" />
+                                </Button>
+                              </div>
                             </div>
                             <div className="bg-neutral-950 rounded-lg p-3 max-h-48 overflow-y-auto font-mono text-xs">
                               {providerDebugLogs[provider.id].slice(-10).reverse().map((log, idx) => (

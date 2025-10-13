@@ -12,7 +12,7 @@ export function useAIProviderManagement() {
       const { data, error } = await supabase
         .from('ai_providers_with_keys')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false});
       
       // Enhanced error handling for missing table
       if (error) {
@@ -30,7 +30,10 @@ export function useAIProviderManagement() {
                 (typeof (item as any).configuration === 'string' ? JSON.parse((item as any).configuration) : (item as any).configuration) || 
                 {},
         capabilities: Array.isArray((item as any).capabilities) ? (item as any).capabilities : [],
-        supported_languages: Array.isArray((item as any).supported_languages) ? (item as any).supported_languages : ['en']
+        supported_languages: Array.isArray((item as any).supported_languages) ? (item as any).supported_languages : ['en'],
+        // Add missing required fields for AIProvider type
+        rate_limit_per_day: (item as any).rate_limit_per_day || 1000,
+        cost_tracking_enabled: (item as any).cost_tracking_enabled || false
       })) as AIProvider[];
     },
   });
@@ -57,7 +60,10 @@ export function useAIProviderManagement() {
         parameters: typeof (item as any).parameters === 'string' ? JSON.parse((item as any).parameters) : (item as any).parameters || {},
         rate_limits: typeof (item as any).rate_limits === 'string' ? JSON.parse((item as any).rate_limits) : (item as any).rate_limits || { per_minute: 60, per_hour: 1000 },
         specialization: Array.isArray((item as any).specialization) ? (item as any).specialization : [],
-        // Add missing properties with defaults
+        // Add missing required fields for AIModel type
+        model_id: (item as any).model_id || item.id,
+        model_name: (item as any).model_name || item.name,
+        max_context_length: (item as any).max_context_length || 4096,
         cost_per_1k_tokens: (item as any).cost_per_1k_tokens || 0.001,
         supports_vision: (item as any).supports_vision || false,
         supports_function_calling: (item as any).supports_function_calling || false,

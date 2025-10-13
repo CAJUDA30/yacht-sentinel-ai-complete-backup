@@ -5,6 +5,10 @@ const ALGORITHM = 'AES-GCM';
 const KEY_LENGTH = 256;
 const IV_LENGTH = 12;
 
+// DEVELOPMENT MODE: Allow unencrypted storage in development only
+const IS_DEVELOPMENT = import.meta.env.DEV || import.meta.env.MODE === 'development';
+const ALLOW_UNENCRYPTED_IN_DEV = IS_DEVELOPMENT;
+
 /**
  * Generate a random encryption key
  * This should be stored securely and not in the codebase
@@ -72,27 +76,53 @@ const getEncryptionKey = async (): Promise<CryptoKey> => {
 
 /**
  * Encrypt API key or sensitive data
+ * In development mode with HTTP, stores with PLAIN: prefix
+ * In production or HTTPS contexts, uses Web Crypto API encryption
  */
 export const encryptApiKey = async (plaintext: string): Promise<string> => {
   if (!plaintext) {
-    console.warn('⚠️ encryptApiKey: Empty plaintext provided');
-    return '';
+    throw new Error('Empty plaintext provided for encryption');
   }
+  
+  const isSecureContext = typeof window !== 'undefined' ? window.isSecureContext : false;
+  const hasCryptoAPI = !!(crypto && crypto.subtle && crypto.subtle.encrypt);
   
   console.log('🔐 encryptApiKey: Starting encryption', {
     plaintextLength: plaintext.length,
     plaintextPrefix: plaintext.substring(0, 4),
-    webCryptoAvailable: !!(crypto && crypto.subtle && crypto.subtle.encrypt),
+    webCryptoAvailable: hasCryptoAPI,
+    isSecureContext,
+    isDevelopment: IS_DEVELOPMENT,
+    allowUnencryptedInDev: ALLOW_UNENCRYPTED_IN_DEV,
     algorithmSupported: ALGORITHM
   });
   
+  // DEVELOPMENT FALLBACK: If Web Crypto API is unavailable and we're in development, use PLAIN: prefix
+  if (!hasCryptoAPI && ALLOW_UNENCRYPTED_IN_DEV) {
+    console.warn('⚠️ encryptApiKey: DEVELOPMENT MODE - Storing with PLAIN: prefix (no encryption)', {
+      reason: 'Web Crypto API unavailable (HTTP context)',
+      isSecureContext,
+      protocol: typeof window !== 'undefined' ? window.location?.protocol : 'unknown',
+      warning: 'This is only allowed in development. Production MUST use HTTPS.'
+    });
+    return `PLAIN:${plaintext}`;
+  }
+  
+  // PRODUCTION MODE: Require Web Crypto API
+  if (!hasCryptoAPI) {
+    const error = new Error('Web Crypto API is not available. HTTPS or secure context required for encryption.');
+    console.error('❌ encryptApiKey: CRITICAL - Web Crypto API unavailable in PRODUCTION', {
+      hasCrypto: !!crypto,
+      hasSubtle: !!(crypto?.subtle),
+      hasEncrypt: !!(crypto?.subtle?.encrypt),
+      isSecureContext,
+      protocol: typeof window !== 'undefined' ? window.location?.protocol : 'unknown',
+      isDevelopment: IS_DEVELOPMENT
+    });
+    throw error;
+  }
+  
   try {
-    // Check if Web Crypto API is available
-    if (!crypto || !crypto.subtle || !crypto.subtle.encrypt) {
-      console.warn('⚠️ encryptApiKey: Web Crypto API not available - using plain text storage with prefix');
-      return `PLAIN:${plaintext}`;
-    }
-    
     const key = await getEncryptionKey();
     const encoder = new TextEncoder();
     const data = encoder.encode(plaintext);
@@ -129,21 +159,28 @@ export const encryptApiKey = async (plaintext: string): Promise<string> => {
       encryptedLength: base64Result.length,
       base64Preview: base64Result.substring(0, 20) + '...',
       ivLength: iv.length,
-      encryptedDataLength: encrypted.byteLength
+      encryptedDataLength: encrypted.byteLength,
+      isProperlyEncrypted: !base64Result.startsWith('PLAIN:')
     });
     
     return base64Result;
   } catch (error: any) {
-    console.error('❌ encryptApiKey: Encryption failed:', {
+    console.error('❌ encryptApiKey: Encryption failed', {
       error: error.message,
       errorType: error.constructor?.name,
+      stack: error.stack,
       plaintextLength: plaintext.length,
-      fallbackAction: 'Using PLAIN: prefix'
+      isDevelopment: IS_DEVELOPMENT
     });
     
-    // In development, return the plain key with a warning
-    console.warn('⚠️ API key not encrypted - using plain text for development');
-    return `PLAIN:${plaintext}`;
+    // DEVELOPMENT FALLBACK: If encryption fails in development, use PLAIN: prefix
+    if (ALLOW_UNENCRYPTED_IN_DEV) {
+      console.warn('⚠️ encryptApiKey: DEVELOPMENT FALLBACK - Storing with PLAIN: prefix after encryption failure');
+      return `PLAIN:${plaintext}`;
+    }
+    
+    // PRODUCTION: Re-throw the error
+    throw new Error(`Failed to encrypt API key: ${error.message}`);
   }
 };
 
@@ -296,76 +333,69 @@ export const testEncryption = async (plaintext: string): Promise<boolean> => {
 };
 
 /**
- * Safely get API key from provider configuration
- * Handles both encrypted and plain text keys with enhanced debugging
- * Checks both config and configuration fields for compatibility
+ * SYSTEMATIC SOLUTION: Safely get API key from provider configuration
+ * Uses unified database-level encryption approach - reads from decryption view
+ * The ai_providers_with_keys view automatically decrypts the api_key field
  */
 export const getProviderApiKey = async (provider: any): Promise<string> => {
-  console.log('🔍 getProviderApiKey DEBUG:', {
+  console.log('🔍 getProviderApiKey: CORE FIX - Database view ONLY (no config interference)', {
     hasProvider: !!provider,
-    hasConfiguration: !!provider?.configuration,
-    hasConfig: !!provider?.config,
-    hasConfigApiKey: !!provider?.config?.api_key,
-    hasConfigurationApiKey: !!provider?.configuration?.api_key,
-    providerType: provider?.provider_type,
     providerId: provider?.id,
-    configKeys: provider?.configuration ? Object.keys(provider.configuration) : [],
-    configObjectKeys: provider?.config ? Object.keys(provider.config) : [],
-    apiKeyInConfig: !!provider?.config?.api_key,
-    apiKeyInConfiguration: !!provider?.configuration?.api_key
+    providerType: provider?.provider_type,
+    providerName: provider?.name,
+    approach: 'database_view_authoritative'
   });
   
-  // Try multiple possible API key locations for maximum compatibility
-  let apiKey = null;
-  let keySource = '';
+  if (!provider) {
+    console.warn('⚠️ getProviderApiKey: No provider provided');
+    return '';
+  }
   
-  // Priority 1: Check configuration.api_key (primary location)
-  if (provider?.configuration?.api_key) {
-    apiKey = provider.configuration.api_key;
-    keySource = 'configuration.api_key';
-  }
-  // Priority 2: Check config.api_key (backup location)
-  else if (provider?.config?.api_key) {
-    apiKey = provider.config.api_key;
-    keySource = 'config.api_key';
-  }
-  // Priority 3: Check root level api_key (legacy support)
-  else if (provider?.api_key) {
-    apiKey = provider.api_key;
-    keySource = 'provider.api_key';
+  // CORE FIX: Use ONLY the api_key field from ai_providers_with_keys view
+  // This is the single source of truth - automatically decrypted by database
+  // NEVER use config or configuration fields for API keys
+  const apiKey = provider.api_key;
+  
+  // Log config interference but IGNORE it completely
+  const configApiKey = provider.config?.api_key || provider.configuration?.api_key;
+  if (configApiKey) {
+    console.warn('🚨 Config interference detected - IGNORING config API key', {
+      config_api_key_preview: configApiKey?.substring(0, 10) + '...',
+      action: 'Using database view api_key field ONLY',
+      provider_id: provider?.id,
+      note: 'Config API keys are legacy data and should be cleaned'
+    });
   }
   
   if (!apiKey) {
-    console.error('❌ getProviderApiKey: No API key found in any location:', {
-      checkedLocations: ['configuration.api_key', 'config.api_key', 'provider.api_key'],
-      hasProvider: !!provider,
-      providerStructure: provider ? Object.keys(provider) : []
+    console.log('🔍 getProviderApiKey: No API key in database view', {
+      checkedField: 'provider.api_key (from ai_providers_with_keys view)',
+      config_ignored: !!configApiKey,
+      status: 'No API key configured in encrypted storage'
     });
     return '';
   }
   
-  console.log('🔐 Found API key in:', keySource, {
-    apiKeyType: typeof apiKey,
-    apiKeyLength: apiKey?.length,
-    startsWithPlain: apiKey?.startsWith('PLAIN:'),
-    startsWithAIza: apiKey?.startsWith('AIza'),
-    lookLikeBase64: /^[A-Za-z0-9+/]+={0,2}$/.test(apiKey || '')
+  // SYSTEMATIC CORRUPTION DETECTION: Reject corrupted keys
+  if (apiKey.startsWith('Icyh') && apiKey.length >= 128) {
+    console.error('🚨 CORRUPTED API KEY DETECTED - Rejecting Icyh prefix key', {
+      corruptedPrefix: 'Icyh',
+      keyLength: apiKey.length,
+      provider: provider?.name,
+      action: 'Returning empty string - key needs to be re-entered',
+      corruption_type: 'double_encryption_artifact'
+    });
+    return '';
+  }
+  
+  console.log('✅ getProviderApiKey: API key retrieved from database view', {
+    keyLength: apiKey.length,
+    keyPrefix: apiKey.substring(0, 4),
+    sourceLocation: 'ai_providers_with_keys_view_AUTHORITATIVE',
+    config_interference_ignored: !!configApiKey
   });
   
-  try {
-    // decryptApiKey now handles plain text detection internally
-    const decryptedKey = await decryptApiKey(apiKey);
-    console.log('✅ API key decryption result:', {
-      success: !!decryptedKey,
-      decryptedLength: decryptedKey?.length,
-      decryptedPrefix: decryptedKey?.substring(0, 10) + '...' || 'N/A',
-      sourceLocation: keySource
-    });
-    return decryptedKey;
-  } catch (error) {
-    console.error('❌ getProviderApiKey: Decryption failed:', error);
-    return '';
-  }
+  return apiKey;
 };
 
 /**
@@ -374,48 +404,49 @@ export const getProviderApiKey = async (provider: any): Promise<string> => {
  */
 export const storeProviderApiKey = async (apiKey: string): Promise<string> => {
   if (!apiKey) {
-    console.warn('⚠️ storeProviderApiKey: Empty API key provided');
-    return '';
+    throw new Error('Empty API key provided for storage');
   }
   
-  console.log('🔐 storeProviderApiKey: Starting encryption process', {
+  console.log('🔐 storeProviderApiKey: Starting STRICT encryption (no fallbacks)', {
     keyLength: apiKey.length,
     keyPrefix: apiKey.substring(0, 4),
     cryptoApiAvailable: !!(crypto && crypto.subtle),
-    environment: typeof window !== 'undefined' ? 'browser' : 'server'
+    environment: typeof window !== 'undefined' ? 'browser' : 'server',
+    isSecureContext: typeof window !== 'undefined' ? window.isSecureContext : 'unknown'
   });
   
   try {
+    // STRICT MODE: Encryption must succeed or throw error
     const encrypted = await encryptApiKey(apiKey);
     
-    console.log('✅ storeProviderApiKey: Encryption process completed', {
+    // Verify encryption succeeded (no PLAIN: prefix allowed in strict mode)
+    if (encrypted.startsWith('PLAIN:')) {
+      throw new Error('Encryption returned PLAIN: prefix - this should never happen in strict mode');
+    }
+    
+    console.log('✅ storeProviderApiKey: STRICT encryption successful', {
       originalLength: apiKey.length,
-      encryptedLength: encrypted?.length,
-      encryptionSuccessful: encrypted && !encrypted.startsWith('PLAIN:'),
-      resultType: encrypted?.startsWith('PLAIN:') ? 'fallback_plain' : 'encrypted',
-      encryptedPrefix: encrypted?.substring(0, 10) + '...' || 'N/A'
+      encryptedLength: encrypted.length,
+      encryptionVerified: !encrypted.startsWith('PLAIN:'),
+      resultType: 'encrypted',
+      encryptedPrefix: encrypted.substring(0, 10) + '...'
     });
     
-    // If encryption succeeded and we didn't get a PLAIN: prefix, return encrypted
-    if (encrypted && !encrypted.startsWith('PLAIN:')) {
-      return encrypted;
-    }
-    
-    // If we got a PLAIN: prefix from encryptApiKey, return it as-is
-    if (encrypted && encrypted.startsWith('PLAIN:')) {
-      return encrypted;
-    }
-    
-    // Fallback: use PLAIN: prefix for secure identification
-    console.warn('⚠️ storeProviderApiKey: Using fallback PLAIN: prefix');
-    return `PLAIN:${apiKey}`;
+    return encrypted;
   } catch (error: any) {
-    console.error('❌ storeProviderApiKey: Encryption failed, using PLAIN: prefix:', {
+    console.error('❌ storeProviderApiKey: STRICT MODE - Encryption failed, operation aborted', {
       error: error.message,
       errorType: error.constructor?.name,
-      apiKeyLength: apiKey.length
+      apiKeyLength: apiKey.length,
+      stack: error.stack
     });
-    return `PLAIN:${apiKey}`;
+    
+    // STRICT MODE: Re-throw error with helpful message
+    throw new Error(
+      `Failed to encrypt API key: ${error.message}. ` +
+      'Ensure you are running in a secure context (HTTPS or localhost). ' +
+      'Web Crypto API is required for production use.'
+    );
   }
 };
 
@@ -449,21 +480,26 @@ export const validateApiKeyByProvider = (apiKey: string, providerType?: string):
   switch (type) {
     case 'grok':
     case 'xai':
-      // Grok supports both modern (xai-) and legacy (129-char) formats
+      // SYSTEMATIC FIX: Reject corrupted keys first
+      if (cleaned.startsWith('Icyh') && cleaned.length >= 128) {
+        return { 
+          isValid: false, 
+          format: 'corrupted', 
+          error: 'Corrupted API key detected (double encryption artifact) - please re-enter your real xai-* key' 
+        };
+      }
+      
+      // PROFESSIONAL: Only accept valid Grok formats
+      // Modern format: xai-* (REQUIRED for Grok/xAI)
       if (/^xai-[a-zA-Z0-9_-]+$/.test(cleaned)) {
         return { isValid: true, format: 'grok_modern' };
       }
-      if (/^[a-zA-Z0-9]{129}$/.test(cleaned)) {
-        return { isValid: true, format: 'grok_legacy' };
-      }
-      // Allow any reasonable length for Grok variations
-      if (/^[a-zA-Z0-9_-]{20,}$/.test(cleaned)) {
-        return { isValid: true, format: 'grok_variant' };
-      }
+      
+      // REJECT all other formats for systematic consistency
       return { 
         isValid: false, 
         format: 'grok_invalid', 
-        error: 'Grok API key must start with "xai-", be exactly 129 alphanumeric characters, or match standard format' 
+        error: 'Grok API key must start with "xai-" prefix' 
       };
       
     case 'openai':
@@ -496,6 +532,15 @@ export const validateApiKeyByProvider = (apiKey: string, providerType?: string):
         { pattern: /^sk-ant-[a-zA-Z0-9_-]+$/, format: 'anthropic_standard' },
         { pattern: /^[a-zA-Z0-9_-]{20,}$/, format: 'generic_valid' }
       ];
+      
+      // SYSTEMATIC CORRUPTION CHECK for unknown providers too
+      if (cleaned.startsWith('Icyh') && cleaned.length >= 128) {
+        return { 
+          isValid: false, 
+          format: 'corrupted', 
+          error: 'Corrupted API key detected (double encryption artifact)' 
+        };
+      }
       
       for (const { pattern, format } of patterns) {
         if (pattern.test(cleaned)) {

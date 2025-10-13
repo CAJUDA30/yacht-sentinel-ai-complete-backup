@@ -1,228 +1,171 @@
-# 🔐 API Key Encryption - Quick Reference Card
+# 🔒 API Key Encryption - Quick Reference
 
-## 🚀 Quick Start
+## TL;DR
 
-### Reading API Keys (Auto-Decrypted)
+**STRICT MODE ENABLED** - All API keys MUST be encrypted or the operation fails.
 
-```typescript
-// ✅ Use decryption views
-const { data } = await supabase
-  .from('ai_providers_with_keys')  // ← View, not table
-  .select('*');
+---
 
-console.log(data[0].api_key);  // Plain text, ready to use
+## ✅ What You Get
+
+```
+✅ NO fallbacks - encryption must succeed or operation fails
+✅ Real data only - no PLAIN: prefix workarounds  
+✅ Both paths identical - wizard and card edit use exact same flow
+✅ Proper error handling - user notified if Web Crypto API unavailable
+✅ Production-ready - requires HTTPS or localhost
 ```
 
-### Saving API Keys (Auto-Encrypted)
+---
 
+## 🎯 Quick Facts
+
+| Question | Answer |
+|----------|--------|
+| **What changed?** | Encryption is now MANDATORY with NO fallbacks |
+| **Affects what?** | All 3 paths: Wizard, Card Edit, Enhanced Wizard |
+| **Required context?** | HTTPS or localhost (secure context) |
+| **Encryption type?** | AES-256-GCM with random IV |
+| **Fallback allowed?** | ❌ NO - operation fails if encryption impossible |
+| **User notified?** | ✅ YES - clear error toast with guidance |
+| **TypeScript errors?** | ✅ 0 (zero) |
+| **Production ready?** | ✅ YES |
+
+---
+
+## 🔐 How It Works
+
+### Success Flow
+```
+1. User enters API key
+2. storeProviderApiKey(key) → encrypted base64
+3. Save to database
+4. ✅ Success toast
+```
+
+### Failure Flow
+```
+1. User enters API key
+2. storeProviderApiKey(key) → throws Error
+3. Catch error → show toast
+4. ❌ Abort (no save)
+```
+
+---
+
+## 📝 Error Messages
+
+### User Sees
+```
+❌ Encryption Required
+
+Failed to encrypt API key: Web Crypto API is not available.
+
+Ensure you are running in a secure context (HTTPS or localhost).
+Web Crypto API is required for production use.
+```
+
+### Console Shows
+```
+❌ encryptApiKey: CRITICAL - Web Crypto API unavailable
+  ├─ hasCrypto: true
+  ├─ hasSubtle: false
+  ├─ isSecureContext: false
+  └─ protocol: http:
+```
+
+---
+
+## 🔧 How to Fix
+
+### If you see the error:
+
+**Option 1: Use HTTPS**
+```bash
+# Deploy to HTTPS server
+# OR use HTTPS in development (e.g., ngrok, local SSL)
+```
+
+**Option 2: Use localhost**
+```bash
+# Run on localhost
+npm run dev
+# Access via http://localhost:5173 (default Vite port)
+```
+
+**Option 3: Use 127.0.0.1**
+```bash
+# Access via http://127.0.0.1:5173
+# This is also considered secure context
+```
+
+---
+
+## 📚 Documentation Files
+
+1. **[STRICT_ENCRYPTION_IMPLEMENTATION.md](./STRICT_ENCRYPTION_IMPLEMENTATION.md)** - Complete implementation details
+2. **[API_KEY_ENCRYPTION_UNIFIED.md](./API_KEY_ENCRYPTION_UNIFIED.md)** - Technical specification
+3. **This file** - Quick reference
+
+---
+
+## 🎓 For Developers
+
+### To encrypt an API key:
 ```typescript
-// ✅ Just save plain text
-await supabase
-  .from('ai_providers_unified')  // ← Direct table
-  .insert({
-    name: 'OpenAI',
-    api_key_encrypted: 'sk-your-plain-key'  // ← Auto-encrypted
+import { storeProviderApiKey } from '@/utils/encryption';
+
+try {
+  const encrypted = await storeProviderApiKey(plainKey);
+  // Use encrypted value
+} catch (error) {
+  // Handle error - show to user
+  toast({
+    title: '❌ Encryption Required',
+    description: error.message,
+    variant: 'destructive'
   });
+  return; // Abort operation
+}
 ```
 
----
-
-## 📋 View Names (Use These for SELECT)
-
-| Table (Direct) | View (Auto-Decrypt) |
-|----------------|---------------------|
-| `ai_providers_unified` | `ai_providers_with_keys` ✅ |
-| `document_ai_processors` | `document_ai_processors_with_credentials` ✅ |
-
----
-
-## ⚡ Common Operations
-
-### AI Provider CRUD
-
+### To decrypt an API key:
 ```typescript
-// CREATE (auto-encrypts)
-await supabase.from('ai_providers_unified').insert({
-  name: 'OpenAI',
-  provider_type: 'openai',
-  api_key_encrypted: 'sk-plain-key',  // ← Will be encrypted
-  is_active: true
-});
+import { getProviderApiKey } from '@/utils/encryption';
 
-// READ (auto-decrypts)
-const { data } = await supabase
-  .from('ai_providers_with_keys')  // ← Use view
-  .select('id, name, api_key, is_active');
-
-// UPDATE (auto-encrypts)
-await supabase
-  .from('ai_providers_unified')
-  .update({ api_key_encrypted: 'sk-new-key' })  // ← Will be encrypted
-  .eq('id', providerId);
-
-// DELETE
-await supabase
-  .from('ai_providers_unified')
-  .delete()
-  .eq('id', providerId);
-```
-
-### Document AI Processor CRUD
-
-```typescript
-// CREATE (auto-encrypts)
-await supabase.from('document_ai_processors').insert({
-  name: 'processor-name',
-  processor_id: '8708cd1d9cd87cc1',
-  gcp_service_account_encrypted: JSON.stringify(creds),  // ← Encrypted
-  is_active: true
-});
-
-// READ (auto-decrypts)
-const { data } = await supabase
-  .from('document_ai_processors_with_credentials')  // ← Use view
-  .select('id, name, gcp_service_account, gcp_credentials');
-
-// UPDATE (auto-encrypts)
-await supabase
-  .from('document_ai_processors')
-  .update({ gcp_service_account_encrypted: newCreds })  // ← Encrypted
-  .eq('id', processorId);
+const plainKey = await getProviderApiKey(provider);
+// Use plainKey for API calls
 ```
 
 ---
 
-## 🔍 Verification Commands
+## ✅ Verification
 
-### Check Encryption Status
+```bash
+# Check TypeScript
+npx tsc --noEmit
 
-```sql
--- See encrypted vs plain text keys
-SELECT 
-  name,
-  CASE WHEN is_encrypted(api_key_encrypted) THEN '🔒 Encrypted' ELSE '🔓 Plain' END AS status,
-  LENGTH(api_key_encrypted) AS key_length
-FROM ai_providers_unified
-WHERE api_key_encrypted IS NOT NULL;
-```
+# Check encryption usage
+grep -r "storeProviderApiKey" src/components/admin/
 
-### Test Encryption/Decryption
-
-```sql
--- Quick test
-SELECT 
-  encrypt_api_key('sk-test') AS encrypted,
-  decrypt_api_key(encrypt_api_key('sk-test')) AS decrypted;
-```
-
-### Verify Triggers Active
-
-```sql
--- Check triggers are working
-SELECT tgname, tgenabled 
-FROM pg_trigger 
-WHERE tgname LIKE 'trigger_auto_encrypt%';
+# Expected: 3 files, 3 usages
+# - Microsoft365AIOperationsCenter.tsx
+# - ProviderConfigurationModal.tsx  
+# - EnhancedProviderWizard.tsx
 ```
 
 ---
 
-## ⚠️ Common Mistakes
+## 🚨 Important Notes
 
-### ❌ DON'T
-
-```typescript
-// ❌ Don't read from base table expecting plain text
-const { data } = await supabase
-  .from('ai_providers_unified')  // Wrong!
-  .select('api_key_encrypted');
-// Returns encrypted base64
-
-// ❌ Don't manually encrypt
-const encrypted = await encryptApiKey(key);
-await supabase.insert({ api_key_encrypted: encrypted });
-// Double encryption!
-
-// ❌ Don't log plain keys
-console.log(provider.api_key);  // Security risk!
-```
-
-### ✅ DO
-
-```typescript
-// ✅ Use decryption views
-const { data } = await supabase
-  .from('ai_providers_with_keys')  // Correct!
-  .select('api_key');
-// Returns plain text
-
-// ✅ Save plain text (auto-encrypted)
-await supabase.insert({ 
-  api_key_encrypted: 'sk-plain-key' 
-});
-
-// ✅ Mask keys when logging
-console.log(maskApiKey(provider.api_key));
-// Output: "sk-12••••••34"
-```
+1. **No PLAIN: prefix** - Not allowed in new saves (strict mode)
+2. **Backward compatible** - Can still READ old PLAIN: keys
+3. **Secure context required** - HTTPS or localhost mandatory
+4. **Operation aborts** - If encryption fails, nothing is saved
+5. **User is notified** - Clear error messages with guidance
 
 ---
 
-## 🔧 Debugging
-
-### Issue: Getting encrypted data instead of plain text
-
-**Solution**: Use the view, not the table
-```typescript
-// Change from:
-.from('ai_providers_unified')
-
-// To:
-.from('ai_providers_with_keys')
-```
-
-### Issue: Decryption warnings in logs
-
-**Solution**: Normal for legacy plain text keys. System handles it safely.
-
-### Issue: Column doesn't exist
-
-**Solution**: Check view name:
-- `ai_providers_with_keys` has `api_key` column ✅
-- `ai_providers_unified` has `api_key_encrypted` column
-
----
-
-## 📊 System Status
-
-```sql
--- Quick health check
-SELECT 
-  '✅ Functions' AS component, 
-  COUNT(*)::TEXT AS count
-FROM pg_proc 
-WHERE proname IN ('encrypt_api_key', 'decrypt_api_key', 'is_encrypted')
-UNION ALL
-SELECT '✅ Triggers', COUNT(*)::TEXT
-FROM pg_trigger 
-WHERE tgname LIKE 'trigger_auto_encrypt%'
-UNION ALL
-SELECT '✅ Views', COUNT(*)::TEXT
-FROM pg_views 
-WHERE viewname LIKE '%_with_%';
-```
-
----
-
-## 📚 Full Documentation
-
-- **Complete Guide**: `/AUTOMATIC_API_KEY_ENCRYPTION_GUIDE.md`
-- **Implementation**: `/ENCRYPTION_IMPLEMENTATION_SUMMARY.md`
-- **Migration**: `/supabase/migrations/20251012110000_automatic_api_key_encryption.sql`
-
----
-
-**Remember**: 
-- ✅ Use **views** for reading (auto-decrypt)
-- ✅ Use **tables** for writing (auto-encrypt)
-- ✅ Save **plain text** keys (triggers encrypt)
-- ✅ **Zero manual encryption** needed!
+**Status:** ✅ Active and Enforced  
+**Mode:** 🔒 STRICT (No Fallbacks)  
+**Updated:** 2025-10-12

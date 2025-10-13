@@ -22,7 +22,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Table,
@@ -32,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, TestTube, Settings, Activity, Plus, Edit2, Trash2, CheckCircle, XCircle, AlertCircle, RefreshCw, Download } from 'lucide-react';
+import { Loader2, TestTube, Plus, Edit2, Trash2, CheckCircle, XCircle, AlertCircle, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -44,7 +43,6 @@ interface DocumentAIProcessor {
   project_id: string;
   display_name: string;
   description: string;
-  // Use specialization from database instead of capabilities array
   specialization: string;
   supported_formats?: string[];
   priority: number;
@@ -124,12 +122,11 @@ const EnhancedDocumentAIManager: React.FC = () => {
           `Sync completed: ${result.sync_results.created} created, ${result.sync_results.updated} updated, ${result.sync_results.errors} errors`
         );
         
-        // Refresh the processors list
         await loadProcessors();
       } else {
         throw new Error(result.error || 'Sync failed');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error syncing processors:', error);
       setSyncProgress('❌ Sync failed');
       toast.error(`Failed to sync processors: ${error.message}`);
@@ -139,127 +136,7 @@ const EnhancedDocumentAIManager: React.FC = () => {
     }
   };
 
-  const getStatusIcon = (processor: DocumentAIProcessor) => {
-    if (!processor.last_test_status) return <AlertCircle className="h-4 w-4 text-gray-400" />;
-    
-    switch (processor.last_test_status) {
-      case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'error':
-        return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'warning':
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
-      default:
-        return <AlertCircle className="h-4 w-4 text-gray-400" />;
-    }
-  };
-
-  const getStatusBadge = (processor: DocumentAIProcessor) => {
-    if (!processor.is_active) {
-      return <Badge variant="secondary">Inactive</Badge>;
-    }
-    
-    if (!processor.last_test_status) {
-      return <Badge variant="outline">Not Tested</Badge>;
-    }
-    
-    switch (processor.last_test_status) {
-      case 'success':
-        return <Badge variant="default" className="bg-green-500">Active</Badge>;
-      case 'error':
-        return <Badge variant="destructive">Error</Badge>;
-      case 'warning':
-        return <Badge variant="secondary" className="bg-yellow-500">Warning</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
-  const saveProcessor = async () => {
-    try {
-      if (!editForm.name || !editForm.processor_id || !editForm.location) {
-        toast.error('Please fill in all required fields');
-        return;
-      }
-
-      const processorData = {
-        ...editForm,
-        updated_at: new Date().toISOString()
-      };
-
-      let error;
-      if (selectedProcessor) {
-        // Update existing processor
-        const { error: updateError } = await supabase
-          .from('document_ai_processors')
-          .update(processorData)
-          .eq('id', selectedProcessor.id);
-        error = updateError;
-      } else {
-        // Create new processor - use type assertion to bypass TypeScript checks
-        const { error: insertError } = await supabase
-          .from('document_ai_processors')
-          .insert([{
-            ...processorData,
-            id: crypto.randomUUID(),
-            created_at: new Date().toISOString()
-          } as any]);
-        error = insertError;
-      }
-
-      if (error) throw error;
-
-      toast.success(`Processor ${selectedProcessor ? 'updated' : 'created'} successfully`);
-      setEditDialogOpen(false);
-      setSelectedProcessor(null);
-      setEditForm({});
-      loadProcessors();
-    } catch (error) {
-      console.error('Error saving processor:', error);
-      toast.error(`Failed to ${selectedProcessor ? 'update' : 'create'} processor`);
-    }
-  };
-
-  const deleteProcessor = async () => {
-    if (!selectedProcessor) return;
-
-    try {
-      const { error } = await supabase
-        .from('document_ai_processors')
-        .delete()
-        .eq('id', selectedProcessor.id);
-
-      if (error) throw error;
-
-      toast.success(`Processor "${selectedProcessor.display_name}" deleted successfully`);
-      setDeleteDialogOpen(false);
-      setSelectedProcessor(null);
-      loadProcessors();
-    } catch (error) {
-      console.error('Error deleting processor:', error);
-      toast.error('Failed to delete processor');
-    }
-  };
-
-  const toggleProcessorStatus = async (processor: DocumentAIProcessor) => {
-    try {
-      const { error } = await supabase
-        .from('document_ai_processors')
-        .update({
-          is_active: !processor.is_active,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', processor.id);
-
-      if (error) throw error;
-
-      toast.success(`Processor ${!processor.is_active ? 'activated' : 'deactivated'}`);
-      loadProcessors();
-    } catch (error) {
-      console.error('Error toggling processor status:', error);
-      toast.error('Failed to update processor status');
-    }
-  };
+  const testProcessor = async (processor: DocumentAIProcessor) => {
     try {
       setTesting(prev => ({ ...prev, [processor.id]: true }));
 
@@ -281,7 +158,6 @@ const EnhancedDocumentAIManager: React.FC = () => {
         tested_at: new Date().toISOString()
       };
 
-      // Update processor with test results
       const { error: updateError } = await supabase
         .from('document_ai_processors')
         .update({
@@ -295,8 +171,8 @@ const EnhancedDocumentAIManager: React.FC = () => {
       if (updateError) throw updateError;
 
       toast.success(`Processor "${processor.display_name}" test completed`);
-      loadProcessors(); // Refresh data
-    } catch (error) {
+      loadProcessors();
+    } catch (error: any) {
       console.error('Error testing processor:', error);
       toast.error(`Failed to test processor "${processor.display_name}"`);
     } finally {
@@ -318,14 +194,12 @@ const EnhancedDocumentAIManager: React.FC = () => {
 
       let error;
       if (selectedProcessor) {
-        // Update existing processor
         const { error: updateError } = await supabase
           .from('document_ai_processors')
           .update(processorData)
           .eq('id', selectedProcessor.id);
         error = updateError;
       } else {
-        // Create new processor - use type assertion to bypass TypeScript checks
         const { error: insertError } = await supabase
           .from('document_ai_processors')
           .insert([{
@@ -343,7 +217,7 @@ const EnhancedDocumentAIManager: React.FC = () => {
       setSelectedProcessor(null);
       setEditForm({});
       loadProcessors();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving processor:', error);
       toast.error(`Failed to ${selectedProcessor ? 'update' : 'create'} processor`);
     }
@@ -364,29 +238,9 @@ const EnhancedDocumentAIManager: React.FC = () => {
       setDeleteDialogOpen(false);
       setSelectedProcessor(null);
       loadProcessors();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting processor:', error);
       toast.error('Failed to delete processor');
-    }
-  };
-
-  const toggleProcessorStatus = async (processor: DocumentAIProcessor) => {
-    try {
-      const { error } = await supabase
-        .from('document_ai_processors')
-        .update({
-          is_active: !processor.is_active,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', processor.id);
-
-      if (error) throw error;
-
-      toast.success(`Processor ${!processor.is_active ? 'activated' : 'deactivated'}`);
-      loadProcessors();
-    } catch (error) {
-      console.error('Error toggling processor status:', error);
-      toast.error('Failed to update processor status');
     }
   };
 
@@ -726,7 +580,6 @@ const EnhancedDocumentAIManager: React.FC = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Edit/Create Processor Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -848,7 +701,6 @@ const EnhancedDocumentAIManager: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>

@@ -46,7 +46,6 @@ let isInitializing = false;
 let initializationPromise: Promise<void> | null = null;
 let initAttempts = 0;
 const MAX_INIT_ATTEMPTS = 3;
-const INIT_TIMEOUT_MS = 5000; // 5 second timeout
 
 // MASTER ROLE DETECTION - Unified role system
 const detectUserRoles = async (user: User): Promise<string[]> => {
@@ -179,22 +178,17 @@ const initializeMasterAuth = async (): Promise<void> => {
     console.log(`[MasterAuth] 🚀 MASTER AUTH SYSTEM - Initializing (attempt ${initAttempts}/${MAX_INIT_ATTEMPTS})...`);
     
     try {
-      // CRITICAL FIX: Add timeout to prevent infinite loading
-      const sessionPromise = supabase.auth.getSession();
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Session fetch timeout')), INIT_TIMEOUT_MS)
-      );
-      
+      // CRITICAL FIX: Trust the auth flow - no dangerous timeouts
       let session = null;
       let sessionError = null;
       
       try {
-        const result = await Promise.race([sessionPromise, timeoutPromise]);
+        const result = await supabase.auth.getSession();
         session = result?.data?.session || null;
         sessionError = result?.error || null;
-      } catch (timeoutError: any) {
-        console.warn('[MasterAuth] ⚠️ Session fetch timed out after', INIT_TIMEOUT_MS, 'ms');
-        sessionError = timeoutError;
+      } catch (error: any) {
+        console.warn('[MasterAuth] ⚠️ Session fetch error:', error.message);
+        sessionError = error;
       }
       
       if (sessionError) {
@@ -334,7 +328,7 @@ const initializeMasterAuth = async (): Promise<void> => {
   return initializationPromise;
 };
 
-// MASTER AUTHENTICATION HOOK - Single unified interface
+// MASTER AUTHENTICATION HOOK - Single unified interface with immediate failure detection
 export const useSupabaseAuth = () => {
   const [state, setState] = useState(masterAuthState);
   
@@ -346,8 +340,34 @@ export const useSupabaseAuth = () => {
       roles: newState.roles,
       isSuperAdmin: newState.isSuperAdmin
     });
+    
+    // CRITICAL: Immediate authentication failure detection
+    const wasAuthenticated = !!state.session;
+    const isNowAuthenticated = !!newState.session;
+    const wasSuper = state.isSuperAdmin;
+    const isNowSuper = newState.isSuperAdmin;
+    
+    // Detect critical authentication failures
+    if ((wasAuthenticated && !isNowAuthenticated) || 
+        (wasSuper && !isNowSuper && newState.session)) {
+      console.error('🚨 CRITICAL AUTH FAILURE DETECTED:', {
+        wasAuthenticated,
+        isNowAuthenticated,
+        wasSuper,
+        isNowSuper,
+        action: 'IMMEDIATE_REDIRECT'
+      });
+      
+      // Immediate redirect - no delays allowed
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth';
+        }
+      }, 0);
+    }
+    
     setState(newState);
-  }, []);
+  }, [state.session, state.isSuperAdmin]);
   
   useEffect(() => {
     console.log('[useSupabaseAuth] 🚀 MASTER HOOK initialized, subscribers:', subscribers.size);
@@ -379,19 +399,102 @@ export const useSupabaseAuth = () => {
       setState(masterAuthState);
     }
     
+    // CRITICAL: Add periodic authentication verification
+    // This catches role changes that might not trigger normal auth state changes
+    let authVerificationInterval: NodeJS.Timeout | null = null;
+    
+    if (!!state.session && state.initialized) {
+      console.log('[useSupabaseAuth] 🔍 Starting periodic auth verification for immediate failure detection');
+      
+      authVerificationInterval = setInterval(async () => {
+        try {
+          // Quick session check
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          // Immediate failure detection
+          if (error || !session) {
+            console.error('🚨 PERIODIC VERIFICATION: Session lost!', { error });
+            window.location.href = '/auth';
+            return;
+          }
+          
+          // Quick role verification for superadmin
+          if (state.isSuperAdmin && session.user) {
+            const currentEmail = session.user.email;
+            const currentId = session.user.id;
+            
+            // Fast superadmin verification
+            const isStillSuper = (
+              currentEmail === 'superadmin@yachtexcel.com' ||
+              currentId === '73af070f-0168-4e4c-a42b-c58931a9009a' ||
+              session.user.user_metadata?.role === 'global_superadmin' ||
+              session.user.app_metadata?.role === 'global_superadmin'
+            );
+            
+            if (!isStillSuper) {
+              console.error('🚨 PERIODIC VERIFICATION: Superadmin role lost!');
+              window.location.href = '/auth';
+              return;
+            }
+          }
+        } catch (verifyError) {
+          console.error('🚨 PERIODIC VERIFICATION: Auth check failed!', verifyError);
+          window.location.href = '/auth';
+        }
+      }, 5000); // Check every 5 seconds for immediate detection
+    }
+    
     return () => {
       subscribers.delete(updateState);
+      if (authVerificationInterval) {
+        clearInterval(authVerificationInterval);
+      }
       console.log('[useSupabaseAuth] Unsubscribed, remaining:', subscribers.size);
     };
-  }, [updateState]);
+  }, [updateState, !!state.session, state.initialized, state.isSuperAdmin]);
   
   const signIn = async (email: string, password: string) => {
     console.log('[MasterAuth] Attempting sign in');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      console.error('[MasterAuth] Sign in error:', error);
+    
+    try {
+      // Attempt sign in directly - no need to clear sessions first
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email, 
+        password 
+      });
+      
+      if (error) {
+        console.error('[MasterAuth] Sign in error:', error);
+        
+        // If we get a database error, try once more after a brief delay
+        if (error.message.includes('Database error granting user')) {
+          console.log('[MasterAuth] Database error detected, retrying once...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ 
+            email, 
+            password 
+          });
+          
+          if (retryError) {
+            console.error('[MasterAuth] Retry also failed:', retryError);
+            return { error: retryError };
+          }
+          
+          console.log('[MasterAuth] Retry successful');
+          return { data: retryData, error: null };
+        }
+        
+        return { error };
+      }
+      
+      console.log('[MasterAuth] Sign in successful');
+      return { data, error: null };
+      
+    } catch (error) {
+      console.error('[MasterAuth] Sign in catch error:', error);
+      return { error };
     }
-    return { error };
   };
   
   const signUp = async (email: string, password: string) => {

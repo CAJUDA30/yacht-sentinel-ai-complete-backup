@@ -25,16 +25,10 @@ verify_jwt = false
 [functions.windy-weather]
 verify_jwt = false
 
-[functions.vision-config]
-verify_jwt = false
-
 [functions.ai-admin]
 verify_jwt = true
 
 [functions.logs-suggest-solution]
-verify_jwt = true
-
-[functions.discover-ai-models]
 verify_jwt = true
 
 [functions.equipment-research]
@@ -42,9 +36,6 @@ verify_jwt = false
 
 [functions.iot-maritime-integration]
 verify_jwt = false
-
-[functions.test-ai-model]
-verify_jwt = true
 
 [functions.unified-voice-ai]
 verify_jwt = false

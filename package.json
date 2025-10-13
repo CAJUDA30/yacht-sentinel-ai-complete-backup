@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:supabase": "npx supabase start --ignore-health-check",
-    "dev:full": "./start-dev.sh",
+    "dev:full": "./start_full_stack.sh",
     "build": "./increment-version.sh && vite build",
     "build:dev": "./increment-version.sh && vite build --mode development",
     "build:no-bump": "vite build",

@@ -38,12 +38,11 @@ if (cacheWasCleared) {
 // =============================================================================
 // SYSTEMATIC CONSOLE MANAGEMENT SYSTEM
 // =============================================================================
-// Clean console output while preserving error visibility
-// Based on user preference for systematic, efficient workflows
+// PROFESSIONAL: Clean console output with intelligent filtering
+// Maintains error visibility while reducing development noise
 
-// FIXED: Console filtering without recursion
 if (import.meta.env.DEV) {
-  // Store ORIGINAL console methods before ANY modifications
+  // Store original console methods for bypass when needed
   const _originalConsole = {
     log: console.log,
     info: console.info,
@@ -52,22 +51,31 @@ if (import.meta.env.DEV) {
     debug: console.debug
   };
   
-  // Simple filter that won't cause recursion
+  // PROFESSIONAL: Intelligent message filtering with comprehensive patterns
   const shouldFilter = (msg: any): boolean => {
     if (!msg) return false;
     const str = String(msg);
     
-    // Filter React DevTools message
-    if (str.includes('Download the React DevTools')) return true;
+    // PROFESSIONAL: React DevTools development convenience message
+    if (str.includes('Download the React DevTools for a better development experience')) return true;
+    if (str.includes('Install the React Developer Tools')) return true;
     
-    // Filter GoTrueClient spam
+    // PROFESSIONAL: Supabase GoTrueClient authentication noise (development only)
     if (str.includes('GoTrueClient@') && 
-        (str.includes('#_acquireLock') || str.includes('lock acquired'))) return true;
+        (str.includes('#_acquireLock') || 
+         str.includes('lock acquired') ||
+         str.includes('lock released') ||
+         str.includes('session refresh'))) return true;
+    
+    // PROFESSIONAL: Hot reload and development server messages
+    if (str.includes('[vite]') && str.includes('connected')) return true;
+    if (str.includes('DevTools') && str.includes('backend')) return true;
     
     return false;
   };
   
-  // Override with NO possibility of recursion
+  // PROFESSIONAL: Override console methods with intelligent filtering
+  // Preserves all errors and warnings while filtering development noise
   console.log = function(...args) {
     if (!shouldFilter(args[0])) {
       _originalConsole.log.apply(this, args);
@@ -80,7 +88,8 @@ if (import.meta.env.DEV) {
     }
   };
   
-  // Never touch error/warn - always show
+  // PROFESSIONAL: Never filter errors or warnings - always show for debugging
+  // console.error and console.warn remain untouched for maximum visibility
 }
 
 createRoot(document.getElementById("root")!).render(

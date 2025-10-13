@@ -1,0 +1,2 @@
+id,created_at,updated_at,name,display_name,provider_id,model_type,is_active,max_tokens,input_cost_per_token,output_cost_per_token,config,capabilities,priority,description
+52107363-f2ef-4012-beae-0b47026fde66,2025-10-12 16:14:16.452166+00,2025-10-12 16:14:16.452166+00,deepseek-chat,DeepSeek Chat,e34749e0-e85e-4040-8cb0-1f0836efb311,text,t,32768,,,{},{},1,DeepSeek Chat - Efficient reasoning model

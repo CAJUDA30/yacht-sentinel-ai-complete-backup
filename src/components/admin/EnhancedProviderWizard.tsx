@@ -328,25 +328,16 @@ export const EnhancedProviderWizard: React.FC<EnhancedProviderWizardProps> = ({
       setIsCreating(true);
       const providerId = `provider_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // Import encryption function
-      const { storeProviderApiKey } = await import('@/utils/encryption');
+      // SYSTEMATIC SOLUTION: Use unified database-level encryption approach
+      // No frontend encryption needed - database handles it automatically
+      const plainApiKey = provider.api_key;
       
-      // Encrypt the API key before storing
-      let encryptedApiKey = '';
-      if (provider.api_key) {
-        try {
-          encryptedApiKey = await storeProviderApiKey(provider.api_key);
-          console.log('✅ API key encrypted successfully for provider creation:', {
-            originalLength: provider.api_key.length,
-            encryptedLength: encryptedApiKey.length,
-            isPlainPrefix: encryptedApiKey.startsWith('PLAIN:'),
-            provider_type: provider.provider_type
-          });
-        } catch (encError) {
-          console.warn('⚠️ Failed to encrypt API key, using fallback:', encError);
-          encryptedApiKey = `PLAIN:${provider.api_key}`;
-        }
-      }
+      console.log('✅ Using database-level encryption (unified approach):', {
+        provider_name: provider.name,
+        provider_type: provider.provider_type,
+        has_api_key: !!plainApiKey,
+        approach: 'unified_database_encryption'
+      });
       
       const providerData = {
         id: providerId, 
@@ -356,8 +347,8 @@ export const EnhancedProviderWizard: React.FC<EnhancedProviderWizardProps> = ({
         capabilities: provider.capabilities, 
         is_active: provider.is_active,
         configuration: {
-          api_endpoint: provider.api_endpoint, 
-          api_key: encryptedApiKey, // CRITICAL: Store encrypted API key!
+          api_endpoint: provider.api_endpoint,
+          // Clean configuration - no sensitive data here
           rate_limit: provider.rate_limit, 
           timeout: provider.timeout,
           max_retries: provider.max_retries, 
@@ -375,9 +366,12 @@ export const EnhancedProviderWizard: React.FC<EnhancedProviderWizardProps> = ({
           connection_latency: connectionLatency,
           created_at: new Date().toISOString(),
           wizard_version: '2.0',
-          encryption_applied: true,
+          database_encryption: true,
           encryption_timestamp: new Date().toISOString()
-        }
+          // NOTE: No api_key here - handled by database-level encryption
+        },
+        // Database-level encryption: store plain key in api_key field
+        api_key: plainApiKey || null
       };
 
       await onProviderCreate(providerData);

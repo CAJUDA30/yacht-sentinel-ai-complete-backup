@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';
+import fs from 'fs';
 
 export default defineConfig({
   plugins: [react()],
@@ -12,6 +13,31 @@ export default defineConfig({
   server: {
     host: true, // Enable network access for multi-device testing
     port: 5173,
+    // HTTPS Configuration - automatically detects certificates
+    https: (() => {
+      try {
+        // Check if HTTPS certificates exist
+        if (fs.existsSync('./certs/localhost.pem') && fs.existsSync('./certs/localhost-key.pem')) {
+          console.log('🔐 HTTPS certificates found - starting in secure mode');
+          console.log('📡 Server will be available at: https://localhost:5173');
+          console.log('✅ Web Crypto API will be available');
+          return {
+            key: fs.readFileSync('./certs/localhost-key.pem'),
+            cert: fs.readFileSync('./certs/localhost.pem'),
+          };
+        } else {
+          console.log('📡 No HTTPS certificates found - starting in HTTP mode');
+          console.log('📡 Server will be available at: http://localhost:5173');
+          console.log('⚠️  Web Crypto API will use development fallback');
+          console.log('💡 Run ./setup-https-dev.sh to enable HTTPS');
+          return undefined;
+        }
+      } catch (error) {
+        console.log('📡 HTTPS setup failed - falling back to HTTP mode');
+        console.log('Error:', error);
+        return undefined;
+      }
+    })(),
   },
   build: {
     rollupOptions: {

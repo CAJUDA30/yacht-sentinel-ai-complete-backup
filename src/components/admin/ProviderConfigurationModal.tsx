@@ -168,45 +168,70 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
     document.addEventListener('keydown', handleEscape);
   };
 
-  // Load and decrypt API key on component mount
+  // SYSTEMATIC FIX: Reset API key loaded state when modal reopens
+  useEffect(() => {
+    if (isOpen && provider?.id) {
+      debugConsole.info('MODAL_LIFECYCLE', 'Modal opened - resetting API key load state', {
+        provider_id: provider.id,
+        provider_name: provider.name,
+        will_reload_api_key: true
+      }, provider.id, provider.name);
+      
+      // Reset the loaded flag to force fresh API key load
+      setApiKeyLoaded(false);
+      setApiKey(''); // Clear current API key
+    }
+  }, [isOpen, provider?.id]);
+
+  // Load and decrypt API key on component mount AND when provider data changes
   useEffect(() => {
     const loadApiKey = async () => {
       if (provider && !apiKeyLoaded) {
         try {
+          debugConsole.info('API_KEY_LOAD', 'Starting API key load process', {
+            provider_id: provider.id,
+            provider_name: provider.name,
+            has_configuration: !!provider.configuration,
+            has_config: !!provider.config,
+            config_api_key_exists: !!(provider.config?.api_key),
+            configuration_api_key_exists: !!(provider.configuration?.api_key)
+          }, provider.id, provider.name);
+          
           // Use the safe API key retrieval function
           const decryptedKey = await getProviderApiKey(provider);
           setApiKey(decryptedKey);
           setApiKeyLoaded(true);
           
           if (decryptedKey) {
-            debugConsole.info('API_KEY', 'API key loaded successfully', {
+            debugConsole.success('API_KEY_LOAD', 'API key loaded from database view successfully', {
               key_length: decryptedKey.length,
               key_prefix: decryptedKey.substring(0, 4),
               provider_type: provider.provider_type,
               is_valid_format: validateApiKeyFormat(decryptedKey, provider.provider_type),
-              storage_type: provider?.configuration?.api_key?.startsWith('PLAIN:') ? 'plain_text' : 'encrypted_or_legacy'
+              source: 'ai_providers_with_keys_view_ONLY'
             }, provider.id, provider.name);
           } else {
-            debugConsole.warn('API_KEY', 'No API key found in provider configuration', {
+            debugConsole.warn('API_KEY_LOAD', 'No API key found in provider data', {
               has_configuration: !!provider.configuration,
-              has_api_key_field: !!provider.configuration?.api_key
+              has_config: !!provider.config,
+              has_api_key_field_in_configuration: !!provider.configuration?.api_key,
+              has_api_key_field_in_config: !!provider.config?.api_key
             }, provider.id, provider.name);
           }
-        } catch (error) {
-          debugConsole.error('API_KEY', 'Failed to load API key', {
+        } catch (error: any) {
+          debugConsole.error('API_KEY_LOAD', 'Failed to load/decrypt API key', {
             error: error.message,
+            stack: error.stack,
             fallback: 'Setting empty API key'
           }, provider.id, provider.name);
           setApiKey('');
           setApiKeyLoaded(true);
         }
-      } else {
-        setApiKeyLoaded(true);
       }
     };
     
     loadApiKey();
-  }, [provider?.id, apiKeyLoaded]);
+  }, [provider?.id, apiKeyLoaded, provider?.configuration?.api_key, provider?.config?.api_key]);
 
   // Initialize debug console with welcome message and load discovered models
   useEffect(() => {
@@ -340,59 +365,63 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
   }, [formData, provider, autoSaveEnabled, apiKey]); // Added apiKey to dependency array
 
   const handleSave = async () => {
-    // Enhanced save with proper API key encryption
-    let encryptedApiKey = '';
+    // SYSTEMATIC SOLUTION: Use unified database-level encryption approach
+    // No frontend encryption needed - database handles it automatically
     
     if (apiKey) {
-      try {
-        // Validate API key format before saving
-        const isValidFormat = validateApiKeyFormat(apiKey, formData.provider_type);
-        if (!isValidFormat) {
-          debugConsole.warn('API_KEY', 'API key format validation failed', {
-            provider_type: formData.provider_type,
-            key_length: apiKey.length,
-            key_prefix: apiKey.substring(0, 4)
-          }, provider?.id, provider?.name);
-          
-          toast({
-            title: '⚠️ API Key Format Warning',
-            description: `The API key format may not be correct for ${formData.provider_type}. Please verify it's a valid key.`,
-            duration: 5000
-          });
-        }
-        
-        // Use the safe storage function
-        encryptedApiKey = await storeProviderApiKey(apiKey);
-        
-        debugConsole.info('API_KEY', 'API key processed for secure storage', {
-          original_length: apiKey.length,
-          stored_length: encryptedApiKey.length,
-          key_format_valid: isValidFormat,
-          storage_type: encryptedApiKey.startsWith('PLAIN:') ? 'plain_text_with_prefix' : 'encrypted'
-        }, provider?.id, provider?.name);
-        
-      } catch (error) {
-        debugConsole.error('API_KEY', 'Failed to process API key for storage', {
-          error: error.message
+      // SYSTEMATIC CORRUPTION CHECK: Reject corrupted API keys
+      if (apiKey.startsWith('Icyh') && apiKey.length >= 128) {
+        debugConsole.error('API_KEY', 'CORRUPTED API KEY REJECTED - Icyh prefix detected', {
+          corruptedPrefix: 'Icyh',
+          keyLength: apiKey.length,
+          action: 'Blocking save - user must enter valid key',
+          corruption_type: 'double_encryption_artifact'
         }, provider?.id, provider?.name);
         
         toast({
-          title: '❌ Storage Error',
-          description: 'Failed to process API key for storage. Using fallback method.',
-          variant: 'destructive'
+          title: '🚨 Corrupted API Key Detected',
+          description: 'This API key appears to be corrupted. Please enter your real API key starting with "xai-"',
+          variant: 'destructive',
+          duration: 8000
         });
         
-        encryptedApiKey = `PLAIN:${apiKey}`;
+        // Clear the corrupted key and stop save
+        setApiKey('');
+        return;
       }
+      
+      // Validate API key format before saving
+      const isValidFormat = validateApiKeyFormat(apiKey, formData.provider_type);
+      if (!isValidFormat) {
+        debugConsole.warn('API_KEY', 'API key format validation failed', {
+          provider_type: formData.provider_type,
+          key_length: apiKey.length,
+          key_prefix: apiKey.substring(0, 4)
+        }, provider?.id, provider?.name);
+        
+        toast({
+          title: '⚠️ API Key Format Warning',
+          description: `The API key format may not be correct for ${formData.provider_type}. Please verify it's a valid key.`,
+          duration: 5000
+        });
+      }
+      
+      debugConsole.info('API_KEY', 'API key will use database-level encryption', {
+        original_length: apiKey.length,
+        key_format_valid: isValidFormat,
+        approach: 'unified_database_encryption'
+      }, provider?.id, provider?.name);
     }
     
     const updatedProvider = {
       ...provider,
       ...formData,
+      // SYSTEMATIC FIX: Pass API key separately, NOT in configuration object
+      // Database trigger handles encryption when stored in api_key_encrypted field
+      api_key: apiKey || null,
       configuration: {
         ...formData.configuration,
-        // Store processed API key in configuration if provided
-        ...(encryptedApiKey && { api_key: encryptedApiKey }),
+        // DO NOT store API key in configuration - it goes to api_key_encrypted field via parent handler
         // Preserve discovered models for future use
         ...(detectedModels.length > 0 && { discovered_models: detectedModels }),
         last_updated: new Date().toISOString()
@@ -400,19 +429,41 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
       updated_at: new Date().toISOString()
     };
     
-    debugConsole.info('PROVIDER_CONFIG', 'Saving provider configuration with processed API key', {
+    debugConsole.info('PROVIDER_CONFIG', 'Calling onSave with updated provider data', {
       changes: {
         name: formData.name !== provider?.name,
         endpoint: formData.api_endpoint !== provider?.api_endpoint,
         api_key_provided: !!apiKey,
-        api_key_processed: !!encryptedApiKey,
+        api_key_stored_separately: true, // API key passed separately, not in configuration
         capabilities_count: formData.configuration.capabilities?.length || 0,
         models_count: formData.configuration.selected_models?.length || 0,
         discovered_models_count: detectedModels.length
+      },
+      updated_provider_structure: {
+        has_id: !!updatedProvider.id,
+        has_configuration: !!updatedProvider.configuration,
+        api_key_passed_separately: !!updatedProvider.api_key,
+        config_has_NO_api_key: !updatedProvider.configuration?.api_key, // Should be true
+        systematic_fix_applied: true
       }
     }, provider?.id, provider?.name);
     
-    await onSave(updatedProvider);
+    // Call parent onSave handler
+    try {
+      await onSave(updatedProvider);
+      
+      debugConsole.success('PROVIDER_CONFIG', 'onSave completed successfully', {
+        provider_name: updatedProvider.name
+      }, provider?.id, provider?.name);
+    } catch (saveError: any) {
+      debugConsole.error('PROVIDER_CONFIG', 'onSave failed', {
+        error: saveError.message,
+        stack: saveError.stack
+      }, provider?.id, provider?.name);
+      
+      throw new Error(`Failed to save provider: ${saveError.message}`);
+    }
+    
     setLastSaveTime(new Date());
     
     // Create local backup to ensure persistence
@@ -437,16 +488,43 @@ export const ProviderConfigurationModal: React.FC<ProviderConfigurationModalProp
 
   const handleManualSave = async () => {
     setAutoSaveEnabled(false); // Temporarily disable auto-save
-    await handleSave();
     
-    toast({
-      title: '✅ Configuration Saved',
-      description: 'All changes have been saved and will persist across app restarts!',
-      duration: 5000
-    });
-    
-    setTimeout(() => setAutoSaveEnabled(true), 1000); // Re-enable auto-save after 1 second
-    onClose();
+    try {
+      // Wait for save to complete
+      await handleSave();
+      
+      debugConsole.success('MANUAL_SAVE', 'Manual save completed successfully', {
+        provider_name: provider?.name,
+        provider_id: provider?.id
+      }, provider?.id, provider?.name);
+      
+      toast({
+        title: '✅ Configuration Saved',
+        description: 'All changes have been saved and will persist across app restarts!',
+        duration: 5000
+      });
+      
+      // Small delay to ensure database commit completes
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setTimeout(() => setAutoSaveEnabled(true), 1000); // Re-enable auto-save after 1 second
+      onClose();
+    } catch (error: any) {
+      debugConsole.error('MANUAL_SAVE', 'Manual save failed', {
+        error: error.message,
+        stack: error.stack
+      }, provider?.id, provider?.name);
+      
+      toast({
+        title: '❌ Save Failed',
+        description: error.message || 'Failed to save configuration changes',
+        variant: 'destructive',
+        duration: 8000
+      });
+      
+      // Re-enable auto-save even on error
+      setTimeout(() => setAutoSaveEnabled(true), 1000);
+    }
   };
 
   // Auto-test connection when both endpoint and API key are available

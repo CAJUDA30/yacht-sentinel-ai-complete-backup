@@ -1,0 +1,1 @@
+id,created_at,updated_at,name,display_name,provider_id,model_type,is_active,max_tokens,input_cost_per_token,output_cost_per_token,config,capabilities,priority,description

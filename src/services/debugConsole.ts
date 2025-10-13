@@ -574,7 +574,7 @@ async function testGrokConnection(
       apiKeyPrefix: apiKey?.substring(0, 4)
     });
 
-    // Enhanced API key validation for Grok
+    // PROFESSIONAL: Basic API key validation (length and type only)
     if (!apiKey || typeof apiKey !== 'string') {
       throw new Error('Grok API key is missing or invalid - must be a valid string');
     }
@@ -583,15 +583,14 @@ async function testGrokConnection(
       throw new Error('Invalid Grok API key format - key appears too short (minimum 20 characters)');
     }
     
-    // Expected formats: xai-* (newer) or 129-character legacy keys
-    if (!apiKey.startsWith('xai-') && apiKey.length !== 129) {
-      debugConsole.logProviderTest(providerId, providerName, 'GROK_WARNING', 'API key format unusual', {
-        keyLength: apiKey.length,
-        expectedFormat: 'xai-* or 129 characters',
-        actualFormat: `${apiKey.substring(0, 4)}... (${apiKey.length} chars)`,
-        recommendation: 'Verify key format at console.x.ai'
-      });
-    }
+    // PROFESSIONAL: Log API key info for debugging without strict format validation
+    debugConsole.logProviderTest(providerId, providerName, 'GROK_API_KEY', 'API key validated', {
+      keyLength: apiKey.length,
+      keyPrefix: apiKey.substring(0, 4),
+      keyFormat: apiKey.startsWith('xai-') ? 'modern' : 
+                 apiKey.length === 129 ? 'legacy' : 'custom',
+      note: 'Multiple API key formats supported'
+    });
 
     // Phase 1: Discover available models for better test selection
     let availableModel = 'grok-beta'; // Conservative fallback

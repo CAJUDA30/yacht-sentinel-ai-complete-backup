@@ -16,6 +16,7 @@ import '@/utils/authErrorHandler';
 
 // Initialize startup health checking
 import { useStartupHealthCheck } from '@/hooks/useStartupHealthCheck';
+import { useAuthFailureDetection } from '@/hooks/useAuthFailureDetection';
 import { systemHealthService } from '@/services/systemHealthService';
 import { enterpriseHealthOrchestrator } from '@/services/enterpriseHealthOrchestrator';
 import { debugConsole } from '@/services/debugConsole';
@@ -84,6 +85,11 @@ const queryClient = new QueryClient({
   },
 });
 
+// Expose queryClient globally for debugging/cache clearing
+if (typeof window !== 'undefined') {
+  (window as any).queryClient = queryClient;
+}
+
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen">
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -94,71 +100,38 @@ const LoadingSpinner = () => (
 const AppStartupHandler = () => {
   const { isAuthenticated, loading } = useSupabaseAuth();
   
+  // CRITICAL: Global authentication failure detection
+  // This provides app-wide protection against delayed auth failures
+  useAuthFailureDetection();
+  
   // Add visibility refresh handler
   useVisibilityRefresh();
   
   // IMPORTANT: Only run health checks and AI initialization AFTER user is authenticated
   const shouldInitialize = isAuthenticated && !loading;
   
-  // Initialize automatic health checking ONLY after login
-  useStartupHealthCheck({
-    enabled: shouldInitialize, // Only when authenticated
-    delay: 2000, // 2 second delay - fast but non-blocking
-    runOnLogin: true,
-    runOnAppStart: false, // Don't run on app start, only after login
-    nonBlocking: true // Don't block UI while health checks run
-  });
-
-  // Initialize enterprise health orchestrator - ONLY when authenticated
+  // COMPLETELY DISABLE ALL HEALTH MONITORING FOR SMOOTH LOADING
+  // All health monitoring systems disabled to prevent loading conflicts
+  // This ensures fast, smooth application startup
+  
+  // DISABLED: Enterprise health orchestrator - causes loading delays
+  // DISABLED: RLS Health Service - causes policy check overhead  
+  // DISABLED: Startup health checks - causes duplicate requests
+  // DISABLED: Background monitoring - causes performance issues
+  
   React.useEffect(() => {
     if (!shouldInitialize) {
       return; // Don't initialize until user is logged in
     }
     
-    let isInitialized = false;
+    // Minimal initialization - no health monitoring
+    debugConsole.info('SYSTEM', '🚀 Fast startup mode - All health monitoring disabled for performance');
+    debugConsole.success('SYSTEM', '✅ Application ready for smooth loading', {
+      health_monitoring: 'disabled',
+      performance_mode: 'optimized',
+      reason: 'Fast loading priority'
+    });
     
-    const initializeEnterpriseMonitoring = async () => {
-      if (isInitialized) return;
-      isInitialized = true;
-
-      try {
-        debugConsole.info('SYSTEM', '🏢 Initializing Enterprise Health Orchestrator - Zero Manual Intervention Mode');
-        
-        // Initialize RLS Health Service first (critical for DELETE operations)
-        debugConsole.info('SYSTEM', '🔒 Initializing RLS Health Monitoring - Preventing Policy Conflicts');
-        await rlsHealthService.initialize();
-        
-        // Start fully automated enterprise health monitoring
-        await enterpriseHealthOrchestrator.initializeAutomatedMonitoring();
-        
-        debugConsole.success('SYSTEM', '✅ Enterprise Health Orchestrator operational - Autonomous monitoring active', {
-          monitoring_mode: 'fully_automated',
-          manual_intervention: 'disabled',
-          systematic_verification: 'enabled',
-          professional_monitoring: 'active',
-          rls_health_monitoring: 'active'
-        });
-        
-      } catch (error: any) {
-        debugConsole.error('SYSTEM', '❌ Enterprise Health Orchestrator initialization failed', { 
-          error: error.message,
-          note: 'System will continue with basic monitoring'
-        });
-      }
-    };
-
-    // Initialize after a short delay to ensure all systems are ready
-    const initTimeout = setTimeout(() => {
-      initializeEnterpriseMonitoring();
-    }, 5000); // 5 seconds - fast initialization
-
-    return () => {
-      clearTimeout(initTimeout);
-      if (isInitialized) {
-        rlsHealthService.destroy();
-        enterpriseHealthOrchestrator.cleanup();
-      }
-    };
   }, [shouldInitialize]); // Only run when authentication state changes
 
   return null; // This component doesn't render anything
