@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "allowUmdGlobalAccess": true,
+    "checkJs": false,
+    "declarationMap": false,
+    "esModuleInterop": true,
+    "experimentalDecorators": false,
+    "importsNotUsedAsValues": "remove",
+    "incremental": true,
+    "jsx": "react",
+    "keyofStringsOnly": false,
+    "lib": ["esnext", "webworker", "dom"],
+    "module": "esnext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "strict": false,
+    "target": "esnext",
+    "useDefineForClassFields": true,
+    "skipLibCheck": true,
+    "allowUnreachableCode": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "allowImportingTsExtensions": true,
+    "noResolve": false,
+    "types": ["./types"],
+    "typeRoots": ["./"],
+    "baseUrl": ".",
+    "paths": {
+      "https://esm.sh/jose@5.2.3": ["./jose.d.ts"],
+      "https://esm.sh/@supabase/supabase-js@2*": ["./types.d.ts"],
+      "https://deno.land/std@0.168.0/*": ["./types.d.ts"]
+    }
+  },
+  "include": [
+    "./**/*.ts",
+    "./_shared/types.ts",
+    "./types.d.ts",
+    "./jose.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
