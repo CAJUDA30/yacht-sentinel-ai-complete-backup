@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import React from "react";
 import { ThemeProvider } from "next-themes";
 import { InventoryProvider } from "@/contexts/InventoryContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
@@ -10,13 +11,13 @@ import { ContextualAIProvider } from "@/contexts/ContextualAIContext";
 import { SecurityProvider } from "@/contexts/SecurityContext";
 import { UniversalLLMProvider } from "@/contexts/UniversalLLMContext";
 import { LocationProvider } from "@/contexts/LocationContext";
-import { AppSettingsProvider } from "@/contexts/AppSettingsContext";
 import { ModuleSettingsProvider } from "@/contexts/ModuleSettingsContext";
 import { AuditIntegrationProvider } from "@/contexts/AuditIntegrationContext";
 import { PerformanceProvider } from "@/contexts/PerformanceContext";
 import { UnifiedSettingsProvider } from "@/contexts/UnifiedSettingsContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AppSettingsProvider } from "@/contexts/AppSettingsContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { checkAndInvalidateCache } from "@/utils/cacheInvalidation";
 import App from "./App.tsx";
 import "./index.css";
@@ -112,8 +113,8 @@ createRoot(document.getElementById("root")!).render(
                         <AppSettingsProvider>
                           <CurrencyProvider>
                             <ModuleSettingsProvider>
-                              <AuditIntegrationProvider>
-                                <UnifiedSettingsProvider>
+                                <AuditIntegrationProvider>
+                                  <UnifiedSettingsProvider>
                                   <InventoryProvider>
                                     <InventorySettingsProvider>
                                       <App />

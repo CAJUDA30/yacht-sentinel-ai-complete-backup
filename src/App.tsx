@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Provider } from 'react-redux';
 import { store } from '@/store';
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -14,15 +14,11 @@ import { AppSettingsProvider } from "@/contexts/AppSettingsContext";
 // Initialize authentication error handling
 import '@/utils/authErrorHandler';
 
-// Initialize startup health checking
-import { useStartupHealthCheck } from '@/hooks/useStartupHealthCheck';
+// Initialize authentication and debugging
 import { useAuthFailureDetection } from '@/hooks/useAuthFailureDetection';
-import { systemHealthService } from '@/services/systemHealthService';
-import { enterpriseHealthOrchestrator } from '@/services/enterpriseHealthOrchestrator';
 import { debugConsole } from '@/services/debugConsole';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useVisibilityRefresh } from '@/hooks/useVisibilityRefresh';
-import { rlsHealthService } from '@/services/rlsHealthService';
 
 // Lazy load components for better performance
 import { lazy, Suspense } from "react";
@@ -109,16 +105,8 @@ const AppStartupHandler = () => {
   
   // IMPORTANT: Only run health checks and AI initialization AFTER user is authenticated
   const shouldInitialize = isAuthenticated && !loading;
-  
-  // COMPLETELY DISABLE ALL HEALTH MONITORING FOR SMOOTH LOADING
-  // All health monitoring systems disabled to prevent loading conflicts
-  // This ensures fast, smooth application startup
-  
-  // DISABLED: Enterprise health orchestrator - causes loading delays
-  // DISABLED: RLS Health Service - causes policy check overhead  
-  // DISABLED: Startup health checks - causes duplicate requests
-  // DISABLED: Background monitoring - causes performance issues
-  
+
+  // Fast startup mode - Health monitoring disabled for performance
   React.useEffect(() => {
     if (!shouldInitialize) {
       return; // Don't initialize until user is logged in

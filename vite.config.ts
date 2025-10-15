@@ -1,10 +1,8 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 import fs from 'fs';
 
-export default defineConfig({
-  plugins: [react()],
+export default {
+  plugins: [],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -127,4 +125,4 @@ export default defineConfig({
     'window.ethereum': 'undefined',
     'window.TronLink': 'undefined'
   }
-});
+};

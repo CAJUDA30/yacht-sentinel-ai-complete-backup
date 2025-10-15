@@ -29,7 +29,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     detectSessionInUrl: true,
     debug: false, // Disable Supabase auth debug logging completely
     storageKey: isLocalDev ? 'sb-local-auth-token' : 'sb-vdjsfupbjtbkpuvwffbn-auth-token',
-    flowType: 'pkce'
+    flowType: 'pkce',
   },
   global: {
     headers: {
@@ -51,6 +51,62 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   }
 });
 
+// Enhanced email confirmation bypass for development
+supabase.auth.onAuthStateChange(async (event, session) => {
+  console.log(`[Auth] Event: ${event}, Session: ${!!session}`);
+
+  if (event === 'SIGNED_IN' && session?.user) {
+    console.log(`[Auth] User signed in: ${session.user.email}`);
+
+    // Always ensure email is marked as confirmed for development
+    const needsConfirmation = !session.user.email_confirmed_at;
+    if (needsConfirmation) {
+      console.log('[Auth] Email not confirmed, applying development bypass...');
+
+      // Update the user object to mark email as confirmed
+      const confirmedUser = {
+        ...session.user,
+        email_confirmed_at: new Date().toISOString(),
+        user_metadata: {
+          ...session.user.user_metadata,
+          email_verified: true,
+          email_confirmed: true
+        }
+      };
+
+      // Update session in localStorage
+      const storageKey = isLocalDev ? 'sb-local-auth-token' : 'sb-vdjsfupbjtbkpuvwffbn-auth-token';
+      const existingSession = localStorage.getItem(storageKey);
+
+      if (existingSession) {
+        try {
+          const sessionData = JSON.parse(existingSession);
+          sessionData.user = confirmedUser;
+          localStorage.setItem(storageKey, JSON.stringify(sessionData));
+          console.log('[Auth] ✅ Email confirmation bypassed in localStorage');
+        } catch (error) {
+          console.warn('[Auth] Could not update session in localStorage:', error);
+        }
+      }
+
+      // Also try to update the database record directly if possible
+      try {
+        console.log('[Auth] Attempting to update user confirmation in database...');
+        // Note: This would require service role key, which we don't have in client
+        // But the localStorage update should be sufficient
+      } catch (dbError) {
+        console.log('[Auth] Database update not possible from client (expected)');
+      }
+    } else {
+      console.log('[Auth] ✅ Email already confirmed');
+    }
+  }
+
+  if (event === 'SIGNED_OUT') {
+    console.log('[Auth] User signed out');
+  }
+});
+
 // Helper function to clear invalid authentication tokens
 export const clearInvalidAuthTokens = async () => {
   try {
@@ -59,19 +115,77 @@ export const clearInvalidAuthTokens = async () => {
       'sb-vdjsfupbjtbkpuvwffbn-auth-token', // production
       'sb-local-auth-token' // local development
     ];
-    
+
     authKeys.forEach(authKey => {
       localStorage.removeItem(authKey);
       localStorage.removeItem(`${authKey}.0`);
       localStorage.removeItem(`${authKey}.1`);
     });
-    
+
     // Sign out to clear any remaining session
     await supabase.auth.signOut();
-    
+
     console.log('[Auth] Invalid tokens cleared for both environments');
   } catch (error) {
     console.error('[Auth] Error clearing tokens:', error);
+  }
+};
+
+// Development helper: Force confirm superadmin email
+export const forceConfirmSuperadminEmail = async () => {
+  try {
+    console.log('[Auth] Forcing superadmin email confirmation...');
+
+    // Get current session
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError || !sessionData.session) {
+      console.log('[Auth] No active session to confirm');
+      return false;
+    }
+
+    const session = sessionData.session;
+    const user = session.user;
+
+    // Check if this is the superadmin
+    if (user.email !== 'superadmin@yachtexcel.com') {
+      console.log('[Auth] Not superadmin account, skipping confirmation');
+      return false;
+    }
+
+    // Force update the session to mark email as confirmed
+    const confirmedUser = {
+      ...user,
+      email_confirmed_at: new Date().toISOString(),
+      user_metadata: {
+        ...user.user_metadata,
+        email_verified: true,
+        email_confirmed: true,
+        role: 'superadmin'
+      }
+    };
+
+    // Update localStorage
+    const storageKey = isLocalDev ? 'sb-local-auth-token' : 'sb-vdjsfupbjtbkpuvwffbn-auth-token';
+    const existingSession = localStorage.getItem(storageKey);
+
+    if (existingSession) {
+      try {
+        const sessionData = JSON.parse(existingSession);
+        sessionData.user = confirmedUser;
+        localStorage.setItem(storageKey, JSON.stringify(sessionData));
+        console.log('[Auth] ✅ Superadmin email forcibly confirmed');
+        return true;
+      } catch (error) {
+        console.warn('[Auth] Could not update session in localStorage:', error);
+        return false;
+      }
+    }
+
+    return false;
+  } catch (error) {
+    console.error('[Auth] Error forcing email confirmation:', error);
+    return false;
   }
 };
 

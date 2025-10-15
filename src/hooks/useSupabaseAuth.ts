@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, forceConfirmSuperadminEmail } from '@/integrations/supabase/client';
 import { handleAuthError, isRefreshTokenError } from '@/utils/authUtils';
 import { authSyncService } from '@/services/authSyncService';
 
@@ -245,21 +245,21 @@ const initializeMasterAuth = async (): Promise<void> => {
         console.log('[MasterAuth] Setting up SINGLE MASTER auth state listener');
         authSubscription = supabase.auth.onAuthStateChange(async (event, session) => {
           console.log('[MasterAuth] 🔄 Auth state changed:', event, session ? `for ${session.user.email}` : 'no session');
-          
+
           // Handle token cleanup on sign out
           if (event === 'SIGNED_OUT') {
             console.log('[MasterAuth] 🔒 User signed out, clearing state');
             localStorage.clear();
             sessionStorage.clear();
           }
-          
+
           let newRoles: string[] = [];
           let newPermissions: string[] = [];
-          
+
           // Detect roles for new session
           if (session?.user) {
             newRoles = await detectUserRoles(session.user);
-            
+
             if (newRoles.includes('superadmin')) {
               newPermissions = ['*'];
             } else if (newRoles.includes('admin')) {
@@ -270,7 +270,7 @@ const initializeMasterAuth = async (): Promise<void> => {
               newPermissions = ['read'];
             }
           }
-          
+
           masterAuthState = {
             user: session?.user || null,
             session: session || null,
@@ -286,7 +286,7 @@ const initializeMasterAuth = async (): Promise<void> => {
             isViewer: newRoles.includes('viewer'),
             isGuest: !session
           };
-          
+
           notifyAllSubscribers();
         });
       }
@@ -454,41 +454,116 @@ export const useSupabaseAuth = () => {
   }, [updateState, !!state.session, state.initialized, state.isSuperAdmin]);
   
   const signIn = async (email: string, password: string) => {
-    console.log('[MasterAuth] Attempting sign in');
-    
+    console.log('[MasterAuth] Attempting sign in with Supabase');
+
     try {
-      // Attempt sign in directly - no need to clear sessions first
-      const { data, error } = await supabase.auth.signInWithPassword({ 
-        email, 
-        password 
+
+      // Primary sign-in attempt
+      console.log('[MasterAuth] Attempting primary sign-in...');
+      let { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       });
-      
+
+      // Handle various sign-in failure scenarios
       if (error) {
-        console.error('[MasterAuth] Sign in error:', error);
-        
-        // If we get a database error, try once more after a brief delay
-        if (error.message.includes('Database error granting user')) {
-          console.log('[MasterAuth] Database error detected, retrying once...');
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ 
-            email, 
-            password 
+        console.log('[MasterAuth] Sign-in failed:', error.message);
+
+        // Case 1: Email not confirmed - try to confirm/resend
+        if (error.message.includes('Email not confirmed')) {
+          console.log('[MasterAuth] Email not confirmed, attempting to handle confirmation...');
+
+          // First, try to sign up again (this might trigger confirmation)
+          const { data: signupData, error: signupError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                role: email.includes('superadmin') ? 'superadmin' : 'user'
+              }
+            }
           });
-          
-          if (retryError) {
-            console.error('[MasterAuth] Retry also failed:', retryError);
-            return { error: retryError };
+
+          if (signupError && !signupError.message.includes('already registered')) {
+            console.error('[MasterAuth] Signup failed:', signupError);
           }
-          
-          console.log('[MasterAuth] Retry successful');
-          return { data: retryData, error: null };
+
+          // Wait for confirmation processing
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          // Try sign-in again
+          const retryResult = await supabase.auth.signInWithPassword({
+            email,
+            password
+          });
+
+          if (retryResult.error) {
+            console.error('[MasterAuth] Sign-in after confirmation attempt failed:', retryResult.error);
+            return { error: retryResult.error };
+          }
+
+          console.log('[MasterAuth] Sign-in successful after email confirmation handling');
+          return { data: retryResult.data, error: null };
         }
-        
+
+        // Case 2: Invalid credentials - user might not exist, try to create
+        if (error.message.includes('Invalid login credentials')) {
+          console.log('[MasterAuth] User might not exist, attempting to create account...');
+
+          // Try to sign up the user
+          const { data: signupData, error: signupError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                role: email.includes('superadmin') ? 'superadmin' : 'user'
+              }
+            }
+          });
+
+          if (signupError) {
+            // If signup fails with "already registered", the user exists but might need confirmation
+            if (signupError.message.includes('already registered') || signupError.message.includes('already been registered')) {
+              console.log('[MasterAuth] User already exists, might need email confirmation');
+              // Try the email confirmation flow
+              return { error: { message: 'Email not confirmed. Please check your email and confirm your account.' } };
+            }
+            console.error('[MasterAuth] Signup failed:', signupError);
+            return { error: signupError };
+          }
+
+          console.log('[MasterAuth] User created successfully, waiting for processing...');
+
+          // Wait for signup to process
+          await new Promise(resolve => setTimeout(resolve, 3000));
+
+          // Try sign-in again
+          const signInResult = await supabase.auth.signInWithPassword({
+            email,
+            password
+          });
+
+          if (signInResult.error) {
+            console.error('[MasterAuth] Sign-in after signup failed:', signInResult.error);
+            return { error: signInResult.error };
+          }
+
+          console.log('[MasterAuth] Sign-in successful after user creation');
+          return { data: signInResult.data, error: null };
+        }
+
+        // Other errors - return as-is
         return { error };
       }
-      
-      console.log('[MasterAuth] Sign in successful');
+
+      console.log('[MasterAuth] Sign-in successful');
+
+      // For superadmin, ensure email confirmation
+      if (data.user?.email === 'superadmin@yachtexcel.com') {
+        console.log('[MasterAuth] Superadmin signed in, forcing email confirmation...');
+        await forceConfirmSuperadminEmail();
+      }
+
       return { data, error: null };
       
     } catch (error) {

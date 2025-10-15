@@ -112,7 +112,7 @@ const Auth = () => {
     
     // Superadmin credentials
     const demoEmail = 'superadmin@yachtexcel.com';
-    const demoPassword = 'superadmin123'; // Using the working password we confirmed
+    const demoPassword = 'admins123'; // Using the correct password from superadmin account
 
     try {
       // Use Master Auth System instead of direct supabase call
@@ -287,7 +287,7 @@ const Auth = () => {
               )}
             </Button>
             <p className="text-xs text-muted-foreground text-center mt-2">
-              Email: superadmin@yachtexcel.com | Password: superadmin123
+              Email: superadmin@yachtexcel.com | Password: admins123
             </p>
           </div>
         </CardContent>

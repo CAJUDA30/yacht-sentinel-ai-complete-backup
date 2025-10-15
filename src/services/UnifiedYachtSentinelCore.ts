@@ -9,8 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { safeQuery } from './DatabaseHealthChecker';
 
 // Core configuration
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://vdjsfupbjtbkpuvwffbn.supabase.co";
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkanNmdXBianRia3B1dndmZmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMjc4MTMsImV4cCI6MjA2OTgwMzgxM30.3sLKA1llE4tRBUaLzZhlLqzvM14d9db5v__GIvwvSng";
 
 // Core interfaces
 export interface YachtData {
